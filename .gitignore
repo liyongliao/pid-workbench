@@ -1,0 +1,37 @@
+# Source-only repository: every operational artifact stays local.
+**/data/
+**/output/
+**/uploads/
+**/reports/
+**/tools/
+**/design/
+**/.venv/
+**/.runtime/
+**/__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.bak
+.DS_Store
+.env
+.env.*
+!.env.example
+**/access-control.json
+**/*password*.json
+# Engineering files, renderings and office originals (including uppercase).
+*.[dD][wW][gG]
+*.[dD][xX][fF]
+*.[pP][dD][fF]
+*.[sS][vV][gG]
+*.[xX][lL][sS]*
+*.[pP][pP][tT]*
+*.png
+*.jpg
+*.jpeg
+*.zip
+*.7z
+*.exe
+*.dll
+*.dylib
+未提供的关联DWG清单.txt
+cad-workbench/未提供的关联DWG清单.txt
