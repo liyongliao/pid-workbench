@@ -177,4 +177,4 @@ class Handler(BaseHTTPRequestHandler):
   if not f.is_file():self.send({'error':'无此页面'},404);return
   self.send(f.read_bytes(),ctype=mimetypes.guess_type(f.name)[0] or 'application/octet-stream')
 if __name__=='__main__':
- port=int(os.environ.get('PID_PORT','8765'));host=os.environ.get('PID_HOST','0.0.0.0');print(f'东方图纸工作台：监听 {host}:{port}，本机访问 http://127.0.0.1:{port}',flush=True);ThreadingHTTPServer((host,port),Handler).serve_forever()
+ port=int(os.environ.get('PID_PORT','8765'));host=os.environ.get('PID_HOST','0.0.0.0');print(f'PID 图纸工作台：监听 {host}:{port}，本机访问 http://127.0.0.1:{port}',flush=True);ThreadingHTTPServer((host,port),Handler).serve_forever()

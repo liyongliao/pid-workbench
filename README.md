@@ -8,6 +8,7 @@
 
 - 普通用户 / 管理员两种密码登录；服务端保护图纸、下载及管理接口。
 - 中文 / 原文切换保持缩放和位置；全屏、网页大屏、设备点击查询。
+- 收藏 / 最近浏览按图纸库和登录身份保存在当前浏览器，最多 100 个收藏和 20 条最近记录。
 - 图名、图号、位号和拼音检索；图内关联跳转及按平台生成缺图清单。
 - 上传 DWG；手动指定跨图目标；编辑及新增 CAD 块属性。
 - 多块、多图暂存后统一生成 DWG，回读检查图元及属性；失败保留已发布版本与草稿。
@@ -82,10 +83,13 @@ python -X utf8 cad-workbench/launch.py
 
 ```sh
 python scripts/check_source_only.py
+node --test tests/library.test.js
 python -m unittest discover -s cad-workbench/tests -p "test_*.py" -v
 ```
 
 可选真实 DWG 集成测试：配置本机引擎和中文字体，设置 `PID_TEST_DWG=1`，再执行相同测试命令。测试在临时目录用代码创建全新的简单 CAD，验证上传、中文提取、属性新增、统一发布和原始文件保留，不读取任何实际工程图纸。无引擎的 CI 会明确跳过此项。
+
+提交前建议执行 `git config core.hooksPath .githooks`，启用本仓库的源码边界检查。CI 也执行相同检查。
 
 GitHub Actions 在 Windows / Linux、Python 3.12 / 3.13 上运行权限和空库测试，另检查 JavaScript 语法及仓库文件边界。CAD 引擎实际执行能力需在目标平台验收。
 

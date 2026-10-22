@@ -3,7 +3,7 @@ from pathlib import Path
 import json,os
 
 CODE_ROOT=Path(__file__).resolve().parent
-VERSION='2.1.0'
+VERSION='2.2.0'
 
 def data_root():
  return Path(os.environ.get('PID_DATA_ROOT',CODE_ROOT)).expanduser().resolve()

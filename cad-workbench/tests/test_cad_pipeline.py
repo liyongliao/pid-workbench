@@ -29,6 +29,18 @@ class RealCADPipelineTests(unittest.TestCase):
     self.assertTrue(any(e['tag']=='PT-9999' for e in drawing['equipment']))
     self.assertTrue(any('压力变送器' in t['chinese'] for t in drawing['translations']))
     self.assertEqual(s.request('/api/search?q='+urllib.parse.quote('合成测试'),cookie=viewer)[1]['drawings'][0]['id'],id)
+    # A second independently generated file supplies the missing referenced number.
+    for text in m.query('TEXT'):text.dxf.text='CEPD-PR-9999'
+    doc.saveas(source/'synthetic-second.dxf');convert(source,source,'DWG','synthetic-second.dxf')
+    second_meta=urllib.parse.urlencode({'filename':'synthetic-second.dwg','platform':'CEPD','code':'CEPD-PR-9998','title':'合成测试关联目标'})
+    status,second_job,_=s.request('/api/admin/upload?'+second_meta,'POST',(source/'synthetic-second.dwg').read_bytes(),admin,{'X-Management-Token':s.state(admin)['token']},raw=True);self.assertEqual(status,202,second_job)
+    second_id=wait_job('upload',second_job['id'])['drawing'];drawing=s.request('/api/drawing/'+id,cookie=viewer)[1]
+    reference=next(r for r in drawing['references'] if r['code']=='CEPD-PR-9998');self.assertEqual(reference['preferredTarget'],second_id)
+    reverse=s.request('/api/drawing/'+second_id,cookie=viewer)[1];self.assertTrue(any(id in r['targets'] for r in reverse['references']))
+    self.assertFalse(any(g['key']=='CEPD-PR-9998' for g in s.request('/api/missing-references',cookie=viewer)[1]['groups']))
+    link={'revision':s.state(admin)['revision'],'drawing':id,'handle':reference['handle'],'code':reference['code'],'targets':[second_id],'preferredTarget':second_id,'note':'合成测试关联说明'}
+    self.assertEqual(s.post_admin('/api/admin/link',link,admin)[0],200)
+    self.assertTrue(any(r.get('manual') and r.get('preferredTarget')==second_id for r in s.request('/api/drawing/'+id,cookie=viewer)[1]['references']))
     item=next(x for x in drawing['items'] if x['entity']=='INSERT');info=s.request('/api/admin/attributes?'+urllib.parse.urlencode({'drawing':id,'handle':item['handle']}),cookie=admin)[1]
     rows=info['attributes'];next(a for a in rows if a['key']=='IN_SERV')['value']='合成测试用途更新';rows.append({'key':'TEST_NOTE','label':'测试备注','value':'合成属性','new':True,'visible':False,**info['placement']})
     payload={'drawing':id,'handle':item['handle'],'revision':info['revision'],'draftRevision':info['draftRevision'],'attributes':rows}

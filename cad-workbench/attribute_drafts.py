@@ -91,7 +91,7 @@ def run(manager,bid):
  base=manager.base;folder=base/'data/attribute-batches'/bid;path=folder/'job.json'
  try:
   with (folder/'build.log').open('w') as log:
-   p=subprocess.run([sys.executable,str(BASE/'scripts/publish_attributes.py'),str(base),bid],stdout=log,stderr=log,timeout=1800)
+   p=subprocess.run([sys.executable,str(BASE/'scripts/publish_attributes.py'),str(base),bid],stdout=log,stderr=log,timeout=1800,env=dict(os.environ,PID_DATA_ROOT=str(base)))
   if p.returncode:raise RuntimeError(read_json(folder/'failure.json',{}).get('error','生成或校验失败，正式图纸未替换，草稿已保留'))
   job=read_json(path)
   with manager.lock:

@@ -18,6 +18,7 @@ jobs:
           node-version: '22'
       - name: Check browser JavaScript
         run: for file in cad-workbench/static/*.js; do node --check "$file"; done
+      - run: node --test tests/library.test.js
   application:
     strategy:
       fail-fast: false
