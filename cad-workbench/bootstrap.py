@@ -9,4 +9,4 @@ requirements=BASE/'requirements.txt';marker=folder/'requirements.installed'
 if not marker.exists() or marker.read_bytes()!=requirements.read_bytes():
  print('首次启动：正在安装本机 Python 依赖，之后启动无需重复安装。',flush=True)
  subprocess.run([str(python),'-m','pip','install','-r',str(requirements)],check=True);marker.write_bytes(requirements.read_bytes())
-subprocess.run([str(python),str(BASE/'launch.py')],check=True)
+subprocess.run([str(python),'-X','utf8',str(BASE/'launch.py')],check=True,env=dict(os.environ,PYTHONUTF8='1'))

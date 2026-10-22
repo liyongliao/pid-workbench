@@ -153,7 +153,7 @@ def patch_dxf(source,target,handle,rows):
  text=''.join(result)
  seed=format(max(int(h,16) for h in d.entitydb if h)+1,'X')
  text=re.sub(r'(\$HANDSEED\s*\n\s*5\s*\n)[0-9A-Fa-f]+',lambda m:m[1]+seed,text,count=1)
- target.write_text(text);generated.unlink();return {'changed':sorted(changed),'added':added,'insert':handle,'newSequence':None if old_seq else (e.seqend.dxf.handle if e.seqend else None)}
+ target.write_text(text,encoding='utf-8');generated.unlink();return {'changed':sorted(changed),'added':added,'insert':handle,'newSequence':None if old_seq else (e.seqend.dxf.handle if e.seqend else None)}
 
 def worker(base,jid,prepare_only=False):
  folder=base/'data/attribute-revisions'/jid;folder.mkdir(parents=True,exist_ok=True);jobpath=base/'data/attribute-jobs'/f'{jid}.json';job=read_json(jobpath);id=job['drawing'];r=next(r for r in read_json(base/'data/manifest.json') if r['id']==id)

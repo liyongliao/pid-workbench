@@ -5,7 +5,7 @@ from references import codes
 
 def decorate(data,base,record,doc,previous=None):
  path=Path(base)/'data/attribute-edits.json'
- saved=json.loads(path.read_text()).get('blocks',{}).get(record['id'],{}) if path.exists() else {}
+ saved=json.loads(path.read_text(encoding='utf-8')).get('blocks',{}).get(record['id'],{}) if path.exists() else {}
  old={i['handle']:{a['key']:a for a in i['attributes']} for i in (previous or {}).get('items',[])}
  present={(t['handle'],t['text']) for t in data['texts']}
  for item in data['items']:

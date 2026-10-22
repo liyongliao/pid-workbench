@@ -23,9 +23,9 @@ def source_platform(r):
  parent=Path(r['source']).parent.name
  return next((p for p in ['CEPD','PRP','WHPA','WHPB','WHPE','WHPF'] if p in parent),r['platform'])
 def rebuild():
- records=json.loads((BASE/'data/manifest.json').read_text());catalog=json.loads((BASE/'data/catalog.json').read_text());cats={r['id']:r for r in catalog};docs={};aliases=collections.defaultdict(set);evidence=[];canonical={};file_keys=collections.defaultdict(set)
+ records=json.loads((BASE/'data/manifest.json').read_text(encoding='utf-8'));catalog=json.loads((BASE/'data/catalog.json').read_text(encoding='utf-8'));cats={r['id']:r for r in catalog};docs={};aliases=collections.defaultdict(set);evidence=[];canonical={};file_keys=collections.defaultdict(set)
  for r in records:
-  r['platform']=source_platform(r);cats[r['id']]['platform']=r['platform'];d=json.loads((BASE/'output'/r['id']/'drawing.json').read_text());d['platform']=r['platform'];docs[r['id']]=d;canonical[r['id']]=keys(r['code'])[0]
+  r['platform']=source_platform(r);cats[r['id']]['platform']=r['platform'];d=json.loads((BASE/'output'/r['id']/'drawing.json').read_text(encoding='utf-8'));d['platform']=r['platform'];docs[r['id']]=d;canonical[r['id']]=keys(r['code'])[0]
   aliases[canonical[r['id']]].add(r['id']);file_keys[canonical[r['id']]].add(r['id'])
  def add(key,id,method,t):
   if key.split('-')[0]!=docs[id]['platform']:return
@@ -82,10 +82,10 @@ def rebuild():
      if targets:counts['resolved']+=1
      else:counts['missing']+=1;unresolved.append(dict(ref,drawing=id))
   d['references']=refs;cats[id]['references']=refs
-  (BASE/'output'/id/'drawing.json').write_text(json.dumps(d,ensure_ascii=False,separators=(',',':')))
- (BASE/'data/manifest.json').write_text(json.dumps(records,ensure_ascii=False,indent=2))
- (BASE/'data/catalog.json').write_text(json.dumps(catalog,ensure_ascii=False,separators=(',',':')))
- (BASE/'data/link-evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2))
+  (BASE/'output'/id/'drawing.json').write_text(json.dumps(d,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+ (BASE/'data/manifest.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),encoding='utf-8')
+ (BASE/'data/catalog.json').write_text(json.dumps(catalog,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+ (BASE/'data/link-evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
  report={'sourceFiles':len(records),'unindexedFiles':[str(p.relative_to(BASE.parent)) for p in BASE.parent.rglob('*.dwg') if not p.is_relative_to(BASE) and str(p.relative_to(BASE.parent)) not in {r['source'] for r in records}],'resolvedOccurrences':counts['resolved'],'missingOccurrences':counts['missing'],'missingUnique':len({r['key'] for r in unresolved}),'unresolved':unresolved,'aliases':{k:sorted(v,key=rank) for k,v in sorted(aliases.items())},'evidenceCount':len(evidence)}
- (BASE/'data/reference-audit.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print({k:v for k,v in report.items() if k not in ('aliases','unresolved')})
+ (BASE/'data/reference-audit.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print({k:v for k,v in report.items() if k not in ('aliases','unresolved')})
 if __name__=='__main__':rebuild()

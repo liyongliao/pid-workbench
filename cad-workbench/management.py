@@ -7,14 +7,16 @@ from references import keys,codes
 
 def write_json(path,data):
  path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
- tmp=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp');tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2));os.replace(tmp,path)
+ tmp=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp');tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8');os.replace(tmp,path)
 def read_json(path,default=None):
- return json.loads(Path(path).read_text()) if Path(path).exists() else copy.deepcopy(default)
+ return json.loads(Path(path).read_text(encoding='utf-8')) if Path(path).exists() else copy.deepcopy(default)
 def stamp():return datetime.datetime.now().astimezone().isoformat(timespec='seconds')
 def signature(drawing,handle,code):return drawing+'|'+handle+'|'+code
 
 class Manager:
  def __init__(self,base=BASE):
+  from workspace import initialize
+  initialize(base)
   self.base=Path(base);self.lock=threading.RLock();self.import_lock=threading.Lock();self.token=secrets.token_urlsafe(32)
   self.override_path=self.base/'data/manual-links.json'
   from attribute_drafts import recover
@@ -86,12 +88,13 @@ class Manager:
      parts.append(f'<tr><td><b>{e(o["sourceCode"])}</b><br>{e(o["sourceTitle"])}<details><summary>原始文件</summary>{e(o["sourceFile"])}</details></td><td>{e(loc)}<br><a href="{e(o["url"])}">定位到图纸</a></td><td>{e(o["context"])}<br><small>邻近：{e(o["nearby"])}</small></td></tr>')
     parts.append('</tbody></table>')
   report='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>缺失关联 DWG 补图清单</title><style>body{font:14px/1.7 system-ui;margin:40px auto;max-width:1200px;padding:0 24px;color:#253039}h1{font-size:26px}h2{margin-top:40px;border-bottom:2px solid #d85a31}h3{margin-bottom:4px}small{font-size:12px;color:#6b7378}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:12px;text-align:left;border:1px solid #ddd;vertical-align:top;overflow-wrap:anywhere}th{background:#f4f2ee}a{color:#b5431e}details{font-size:11px}@media print{body{margin:0;font-size:10pt}tr{break-inside:avoid}h2,h3{break-after:avoid}}</style>'+''.join(parts)+'</html>'
-  (out/'缺失关联图号清单.html').write_text(report);(out/'缺失关联图号清单.txt').write_text('\n'.join(text));(self.base/'未提供的关联DWG清单.txt').write_text('\n'.join(text));write_json(out/'missing-references.json',r)
+  (out/'缺失关联图号清单.html').write_text(report,encoding='utf-8');(out/'缺失关联图号清单.txt').write_text('\n'.join(text),encoding='utf-8');(self.base/'未提供的关联DWG清单.txt').write_text('\n'.join(text),encoding='utf-8');write_json(out/'missing-references.json',r)
  def state(self):
   attribute_jobs=[{k:v for k,v in read_json(p).items() if k not in ('attributes','blocks')} for p in (self.base/'data/attribute-jobs').glob('*.json')]
   from attribute_drafts import summary
   from cad_runtime import converter_status
-  return {'drafts':summary(self),'cadRuntime':converter_status(),'token':self.token,'revision':self.overrides['revision'],'missing':self.report,'manualLinks':list(self.overrides['links'].values()),'attributeJobs':sorted(attribute_jobs,key=lambda j:j['createdAt'],reverse=True)[:30],'uploads':sorted([read_json(p) for p in (self.base/'data/upload-jobs').glob('*.json')],key=lambda j:j['createdAt'],reverse=True)[:20]}
+  from diagnostics import snapshot
+  return {'system':snapshot(self),'drafts':summary(self),'cadRuntime':converter_status(),'token':self.token,'revision':self.overrides['revision'],'missing':self.report,'manualLinks':list(self.overrides['links'].values()),'attributeJobs':sorted(attribute_jobs,key=lambda j:j['createdAt'],reverse=True)[:30],'uploads':sorted([read_json(p) for p in (self.base/'data/upload-jobs').glob('*.json')],key=lambda j:j['createdAt'],reverse=True)[:20]}
  def edit_link(self,data):
   with self.lock:
    if data.get('revision')!=self.overrides['revision']:raise ValueError('关联已被其他窗口修改，请重新打开编辑器后保存。')
@@ -121,6 +124,10 @@ class Manager:
   if platform!=kk[0].split('-')[0]:raise ValueError('所属平台应与图号一致')
   if not title or len(title)>140:raise ValueError('请填写图纸中文名称（最多 140 字）')
   if length<6 or length>64*1024*1024:raise ValueError('单张 DWG 文件大小应在 6 字节至 64 MB 之间')
+  from cad_runtime import converter_status,drawing_font
+  status=converter_status()
+  if not status['available']:raise ValueError(status['message'])
+  drawing_font()
   if not self.import_lock.acquire(blocking=False):raise ValueError('已有图纸正在导入，请等待完成后再上传')
   id='u'+uuid.uuid4().hex[:12];folder=self.base/'uploads'/id;folder.mkdir(parents=True);path=folder/filename
   try:
@@ -143,7 +150,7 @@ class Manager:
   jobpath=self.base/'data/upload-jobs'/f'{id}.json'
   try:
    with (self.base/'uploads'/id/'import.log').open('w') as log:
-    p=subprocess.run([sys.executable,str(BASE/'scripts/import_drawing.py'),str(self.base),id],stdout=log,stderr=log,timeout=600)
+    p=subprocess.run([sys.executable,str(BASE/'scripts/import_drawing.py'),str(self.base),id],stdout=log,stderr=log,timeout=600,env=dict(os.environ,PID_DATA_ROOT=str(self.base)))
    if p.returncode:raise RuntimeError('CAD 转换或校验失败，请检查文件是否可在 CAD 中打开。详情已保存在该次上传的 import.log。')
    bundle=read_json(self.base/'uploads'/id/'result.json')
    with self.lock:

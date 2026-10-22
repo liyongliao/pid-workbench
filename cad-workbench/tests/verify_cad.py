@@ -39,7 +39,7 @@ def work(r):
    for label,doc in [('DXF',b),('DWG',c)]:
     v=doc.entitydb.get(e.dxf.handle)
     if v is None or v.dxf.text!=e.dxf.text:errors.append(label+'位号属性改变:'+e.dxf.handle)
- ledger=json.loads((BASE/'output'/r['id']/'drawing.json').read_text())['translations']
+ ledger=json.loads((BASE/'output'/r['id']/'drawing.json').read_text(encoding='utf-8'))['translations']
  zh=0
  for t in ledger:
   e=c.entitydb.get(t['handle'])
@@ -50,12 +50,12 @@ def work(r):
     else:zh+=1
  return dict(id=r['id'],code=r['code'],geometryCount=len(ma),protectedAttributes=protected,chineseEntities=zh,errors=errors)
 if __name__=='__main__':
- records=json.loads((BASE/'data/manifest.json').read_text());results=[]
+ records=json.loads((BASE/'data/manifest.json').read_text(encoding='utf-8'));results=[]
  with concurrent.futures.ProcessPoolExecutor(max_workers=3) as pool:
   for n,r in enumerate(pool.map(work,records),1):
    results.append(r)
    if r['errors']:print(r['id'],r['errors'][:5],flush=True)
    elif n%25==0:print(n,'verified',flush=True)
  report={'drawings':len(results),'passed':sum(not r['errors'] for r in results),'protectedAttributes':sum(r['protectedAttributes'] for r in results),'chineseEntities':sum(r['chineseEntities'] for r in results),'results':results}
- (BASE/'data/verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print({k:v for k,v in report.items() if k!='results'},flush=True)
+ (BASE/'data/verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print({k:v for k,v in report.items() if k!='results'},flush=True)
  sys.exit(0 if report['passed']==report['drawings'] else 1)

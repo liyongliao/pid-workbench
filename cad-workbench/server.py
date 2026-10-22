@@ -3,11 +3,12 @@ from pathlib import Path
 import json,urllib.parse,mimetypes,re,os,threading
 from rapidfuzz import fuzz
 from management import Manager
+from workspace import CODE_ROOT,VERSION,data_root,initialize,instance_id
 from access_control import AccessControl,AccessError,local_client,cookie_header
-BASE=Path(os.environ.get('PID_DATA_ROOT',Path(__file__).resolve().parent)).resolve();ROOT=BASE.parent
+BASE=initialize(data_root());ROOT=BASE.parent
 access=AccessControl(BASE)
 manager=Manager(BASE)
-logic=json.loads((BASE/'data/logic.json').read_text()) if (BASE/'data/logic.json').exists() else {}
+logic=json.loads((BASE/'data/logic.json').read_text(encoding='utf-8')) if (BASE/'data/logic.json').exists() else {}
 def norm(s):return re.sub(r'[^A-Z0-9\u4e00-\u9fff]','',s.upper())
 def shorttag(s):return re.sub(r'^(CEPD?|WHP[A-Z]|WP[A-Z]|PRP)-','',s.upper())
 class Handler(BaseHTTPRequestHandler):
@@ -97,7 +98,10 @@ class Handler(BaseHTTPRequestHandler):
   if p=='/api/auth/session':
    self.send({'configured':bool(access.config),'canSetup':not access.config and local_client(self.client_address[0]),'authenticated':bool(self.session),**({'role':self.session['role'],'csrf':self.session['csrf']} if self.session else {})});return
   if p=='/login':
-   self.send((BASE/'static/login.html').read_bytes(),ctype='text/html; charset=utf-8');return
+   self.send((CODE_ROOT/'static/login.html').read_bytes(),ctype='text/html; charset=utf-8');return
+  if p=='/api/admin/system':
+   from diagnostics import snapshot
+   self.send(snapshot(manager));return
   if p=='/api/admin/state':self.send(manager.state());return
   if p=='/api/admin/attributes':
    from attribute_editor import block_info
@@ -112,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
    origin=f'http://{self.connection.getsockname()[0]}:{self.server.server_port}'
    report=(BASE/'reports'/name).read_bytes().replace(b'http://127.0.0.1:8765',origin.encode())
    self.send(report,ctype=('text/html; charset=utf-8' if name.endswith('.html') else 'text/plain; charset=utf-8'),filename=name if q.get('download') else None);return
-  if p=='/api/health':self.send({'name':'cad-workbench','drawings':len(catalog),'version':'2.0-dwg'});return
+  if p=='/api/health':self.send({'name':'cad-workbench','drawings':len(catalog),'version':VERSION,'instance':instance_id(BASE)});return
   if p=='/api/catalog':
    self.send([{k:v for k,v in r.items() if k!='search'} for r in catalog]);return
   if p=='/api/search':
@@ -129,10 +133,10 @@ class Handler(BaseHTTPRequestHandler):
   if p.startswith('/api/drawing/'):
    id=p.split('/')[-1]
    if id not in manifest:self.send({'error':'未找到图纸'},404);return
-   data=json.loads((BASE/'output'/id/'drawing.json').read_text());data['references']=catmap[id]['references'];self.send(data);return
+   data=json.loads((BASE/'output'/id/'drawing.json').read_text(encoding='utf-8'));data['references']=catmap[id]['references'];self.send(data);return
   if p=='/api/logic':self.send(logic);return
   if p=='/api/quality':
-   quality=json.loads((BASE/'data/quality.json').read_text());quality['missingReferences']=[dict(r,drawing=d['id']) for d in catalog for r in d['references'] if not r.get('targets') and not r.get('selfReference')]
+   quality=json.loads((BASE/'data/quality.json').read_text(encoding='utf-8'));quality['missingReferences']=[dict(r,drawing=d['id']) for d in catalog for r in d['references'] if not r.get('targets') and not r.get('selfReference')]
    quality['review']=[dict(t,drawing=d['id'],code=d['code']) for d in catalog for t in manager.drawing(d['id'])['translations'] if t['review']]
    self.send(quality);return
   if p=='/api/related':
@@ -145,10 +149,14 @@ class Handler(BaseHTTPRequestHandler):
    effects=[e for e in logic.get('effects',[]) if norm(shorttag(e['tag']))==target] if platform=='CEPD' else []
    self.send({'drawings':matches,'causes':causes,'effects':effects});return
   if p.startswith('/download/'):
-   _,_,id,kind=p.split('/')
+   parts=p.split('/')
+   if len(parts)!=4:self.send({'error':'下载地址无效'},404);return
+   _,_,id,kind=parts
    if id not in manifest:self.send({'error':'未找到图纸'},404);return
    name=manifest[id]['filename'];folder=BASE/'output'/id
-   if kind=='original':f=ROOT/manifest[id]['source']
+   if kind=='original':f=(ROOT/manifest[id]['source']).resolve()
+   if kind=='original':
+    if not f.is_relative_to(ROOT):self.send({'error':'源文件路径无效'},404);return
    elif kind=='dwg':f=folder/'中文图纸.dwg';name=Path(name).stem+'-中文.dwg'
    elif kind=='dxf':f=folder/'中文图纸.dxf';name=Path(name).stem+'-中文.dxf'
    elif kind=='pdf':
@@ -164,9 +172,9 @@ class Handler(BaseHTTPRequestHandler):
    f=(BASE/p.lstrip('/')).resolve()
    if not f.is_relative_to(BASE/'output') or f.suffix!='.svg':self.send({'error':'无此文件'},404);return
   else:
-   f=(BASE/'static'/('index.html' if p=='/' else p.lstrip('/'))).resolve()
-   if not f.is_relative_to(BASE/'static'):self.send({'error':'无此页面'},404);return
-  if not f.resolve().is_relative_to(BASE) or not f.is_file():self.send({'error':'无此页面'},404);return
+   f=(CODE_ROOT/'static'/('index.html' if p=='/' else p.lstrip('/'))).resolve()
+   if not f.is_relative_to(CODE_ROOT/'static'):self.send({'error':'无此页面'},404);return
+  if not f.is_file():self.send({'error':'无此页面'},404);return
   self.send(f.read_bytes(),ctype=mimetypes.guess_type(f.name)[0] or 'application/octet-stream')
 if __name__=='__main__':
  port=int(os.environ.get('PID_PORT','8765'));host=os.environ.get('PID_HOST','0.0.0.0');print(f'东方图纸工作台：监听 {host}:{port}，本机访问 http://127.0.0.1:{port}',flush=True);ThreadingHTTPServer((host,port),Handler).serve_forever()

@@ -13,8 +13,8 @@ def protected_value(key,value):
 def work(r):
  folder=BASE/'output'/r['id'];p=folder/'drawing.json'
  if not p.exists():return None
- d,audit=read_source(BASE/r.get('workingDxf',r['dxf']));data=json.loads(p.read_text());ledger=[]
- overrides=json.loads((BASE/'data/text-overrides.json').read_text()).get(r['id'],{}) if (BASE/'data/text-overrides.json').exists() else {}
+ d,audit=read_source(BASE/r.get('workingDxf',r['dxf']));data=json.loads(p.read_text(encoding='utf-8'));ledger=[]
+ overrides=json.loads((BASE/'data/text-overrides.json').read_text(encoding='utf-8')).get(r['id'],{}) if (BASE/'data/text-overrides.json').exists() else {}
  origfonts={s.dxf.name:(s.dxf.font,s.dxf.get('bigfont','')) for s in d.styles}
  if '中文标注' not in d.styles:d.styles.new('中文标注')
  for s in d.styles:s.dxf.font=drawing_font();s.dxf.bigfont=''
@@ -43,7 +43,7 @@ def work(r):
  for s in d.styles:
   if s.dxf.name in origfonts:s.dxf.font,s.dxf.bigfont=origfonts[s.dxf.name]
  d.styles.get('中文标注').dxf.font=Path(drawing_font()).name;d.saveas(folder/'中文图纸.dxf')
- previous=json.loads(p.read_text());data['translations']=ledger;data['title']=title(r);data['title']=re.sub(r'列\s*[\x27\"]?([A-C])[\x27\"]?',r'\1列',data['title']).replace('[原版]','').strip()
+ previous=json.loads(p.read_text(encoding='utf-8'));data['translations']=ledger;data['title']=title(r);data['title']=re.sub(r'列\s*[\x27\"]?([A-C])[\x27\"]?',r'\1列',data['title']).replace('[原版]','').strip()
  for t in data['texts']:t['zh']=overrides.get(t['handle'],{}).get('chinese',translate(t['text']))
  for it in data['items']:
   for a in it['attributes']:a['value']=a['original'] if protected_value(a['key'],a['original']) else translate(a['original'])
@@ -54,18 +54,18 @@ def work(r):
  for ref in data['references']:ref['context']=next((t['zh'] for t in data['texts'] if t['handle']==ref['handle']),ref['context'])
  from attribute_metadata import decorate,search_extra
  decorate(data,BASE,r,d,previous);ledger=data['translations']
- p.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':')))
+ p.write_text(json.dumps(data,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
  return {'id':r['id'],'code':r['code'],'title':data['title'],'platform':r['platform'],'source':r['source'],'equipment':data['equipment'],'references':data['references'],'textCount':len(data['texts']),'translated':len(ledger),'reviewCount':sum(x['review'] for x in ledger),'entityCount':len(data['items']),'search':' '.join([r['filename'],data['title'],''.join(lazy_pinyin(data['title']))]+[x['zh'] for x in data['texts']]+[e['tag'] for e in data['equipment']]+[search_extra(data)]),'status':'ready'}
 def link_catalog(results,records):
- (BASE/'data/catalog.json').write_text(json.dumps(sorted(results,key=lambda r:r['id']),ensure_ascii=False,separators=(',',':')))
+ (BASE/'data/catalog.json').write_text(json.dumps(sorted(results,key=lambda r:r['id']),ensure_ascii=False,separators=(',',':')),encoding='utf-8')
  from references import rebuild
  rebuild()
 if __name__=='__main__':
- records=json.loads((BASE/'data/manifest.json').read_text());selected=set(sys.argv[1:]);rs=[r for r in records if not selected or r['id'] in selected];results=[]
+ records=json.loads((BASE/'data/manifest.json').read_text(encoding='utf-8'));selected=set(sys.argv[1:]);rs=[r for r in records if not selected or r['id'] in selected];results=[]
  with concurrent.futures.ProcessPoolExecutor(max_workers=3) as pool:
   for n,r in enumerate(pool.map(work,rs)):
    if r:results.append(r)
    print(n+1,len(rs),r['id'] if r else 'error',flush=True)
  if selected:
-  previous={r['id']:r for r in json.loads((BASE/'data/catalog.json').read_text())};previous.update({r['id']:r for r in results});results=list(previous.values())
+  previous={r['id']:r for r in json.loads((BASE/'data/catalog.json').read_text(encoding='utf-8'))};previous.update({r['id']:r for r in results});results=list(previous.values())
  link_catalog(results,records)

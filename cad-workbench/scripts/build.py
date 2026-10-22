@@ -48,7 +48,7 @@ def render(d,folder,variant,ext):
  for el in root.iter('path'):
   cl=el.attrib.pop('class',None)
   if cl in styles:el.set('style',styles[cl])
- text=ET.tostring(root,encoding='unicode');(folder/f'{variant}.svg').write_text(text)
+ text=ET.tostring(root,encoding='unicode');(folder/f'{variant}.svg').write_text(text,encoding='utf-8')
  return bk.transformation_matrix,root.get('viewBox')
 def title(r):
  s=Path(r['filename']).stem
@@ -72,7 +72,7 @@ def read_source(path):
   return ezdxf.readfile(path),SimpleNamespace(errors=[],fixes=[],unavailable=str(ex))
 def build(r):
  folder=BASE/'output'/r['id'];folder.mkdir(parents=True,exist_ok=True)
- previous=json.loads((folder/'drawing.json').read_text()) if r.get('workingDxf') and (folder/'drawing.json').exists() else None
+ previous=json.loads((folder/'drawing.json').read_text(encoding='utf-8')) if r.get('workingDxf') and (folder/'drawing.json').exists() else None
  try:
   d,audit=read_source(BASE/r.get('workingDxf',r['dxf']))
   texts=[];items=[];equip=[];refs=[];ledger=[]
@@ -148,23 +148,23 @@ def build(r):
   payload={'id':r['id'],'title':title(r),'code':r['code'],'platform':r['platform'],'source':r['source'],'extents':ext,'viewBox':[float(x) for x in viewbox.split()],'items':items,'equipment':equip,'references':refs,'texts':texts,'translations':ledger,'entityCounts':r['entityCounts'],'audit':{'errors':len(audit.errors),'fixes':len(audit.fixes),'unavailable':getattr(audit,'unavailable',None)},'xref':[b.name for b in d.blocks if b.block.dxf.flags&4]}
   from attribute_metadata import decorate,search_extra
   decorate(payload,BASE,r,d,previous);ledger=payload['translations'];equip=payload['equipment']
-  (folder/'drawing.json').write_text(json.dumps(payload,ensure_ascii=False,separators=(',',':')))
+  (folder/'drawing.json').write_text(json.dumps(payload,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
   return {'id':r['id'],'code':r['code'],'title':payload['title'],'platform':r['platform'],'source':r['source'],'equipment':equip,'references':refs,'textCount':len(texts),'translated':len(ledger),'reviewCount':sum(x['review'] for x in ledger),'entityCount':len(items),'search':' '.join([r['filename'],payload['title'],''.join(lazy_pinyin(payload['title']))]+[x['zh'] for x in texts]+[e['tag'] for e in equip]+[search_extra(payload)]),'status':'ready'}
  except Exception as ex:
   traceback.print_exc();return {'id':r['id'],'code':r['code'],'title':title(r),'platform':r['platform'],'status':'error','error':str(ex)}
 def main():
- records=json.loads((BASE/'data/manifest.json').read_text()); selected=set(sys.argv[1:]);rs=[r for r in records if not selected or r['id'] in selected]
+ records=json.loads((BASE/'data/manifest.json').read_text(encoding='utf-8')); selected=set(sys.argv[1:]);rs=[r for r in records if not selected or r['id'] in selected]
  results=[]
  with concurrent.futures.ProcessPoolExecutor(max_workers=3) as pool:
   for n,result in enumerate(pool.map(build,rs)):
    results.append(result);print(f"{n+1}/{len(rs)} {result['id']} {result['status']}",flush=True)
- old=json.loads((BASE/'data/catalog.json').read_text()) if selected and (BASE/'data/catalog.json').exists() else []
+ old=json.loads((BASE/'data/catalog.json').read_text(encoding='utf-8')) if selected and (BASE/'data/catalog.json').exists() else []
  allres={r['id']:r for r in old};allres.update({r['id']:r for r in results})
  aliases=collections.defaultdict(list)
  for r in records:
   aliases[normref(r['code'])].append(r['id'])
  for r in allres.values():
   for ref in r.get('references',[]):ref['targets']=[x for x in aliases.get(ref['key'],[]) if x!=r['id']]
- (BASE/'data/catalog.json').write_text(json.dumps(list(allres.values()),ensure_ascii=False,separators=(',',':')))
- (BASE/'data/glossary.json').write_text(json.dumps({'instruments':INSTRUMENTS,'attributes':ATTR},ensure_ascii=False))
+ (BASE/'data/catalog.json').write_text(json.dumps(list(allres.values()),ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+ (BASE/'data/glossary.json').write_text(json.dumps({'instruments':INSTRUMENTS,'attributes':ATTR},ensure_ascii=False),encoding='utf-8')
 if __name__=='__main__':main()

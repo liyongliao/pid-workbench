@@ -1,6 +1,6 @@
 """Two shared role passwords; credentials stay on disk, sessions stay in memory."""
 import hashlib,hmac,json,secrets,time,threading,os,ipaddress
-from http.cookies import SimpleCookie
+from http.cookies import SimpleCookie,CookieError
 
 ROLES=('viewer','admin')
 COOKIE='pid_session'
@@ -30,7 +30,7 @@ class AccessControl:
  def __init__(self,base):
   self.path=base/'data/access-control.json';self.lock=threading.RLock();self.sessions={};self.attempts={};self.config=None
   if self.path.exists():
-   self.config=json.loads(self.path.read_text())
+   self.config=json.loads(self.path.read_text(encoding='utf-8'))
    if self.config.get('version')!=1:raise RuntimeError('访问密码配置版本无效，请在服务器本机修复')
    for role in ROLES:
     record=self.config['passwords'][role]
@@ -43,7 +43,7 @@ class AccessControl:
  def session(self,cookie):
   try:
    jar=SimpleCookie();jar.load(cookie or '');token=jar[COOKIE].value
-  except (KeyError,ValueError):return None
+  except (KeyError,ValueError,CookieError):return None
   key=hashlib.sha256(token.encode()).hexdigest()
   with self.lock:
    session=self.sessions.get(key)

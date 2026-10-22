@@ -1,4 +1,4 @@
-import json,re
+import json,re,os
 from pathlib import Path
 from ezdxf.lldxf.encoding import decode_mif_to_unicode
 BASE=Path(__file__).resolve().parents[1]
@@ -7,9 +7,13 @@ def clean(s):
  s=re.sub(r'\\U\+([0-9A-Fa-f]{4})',lambda m:chr(int(m[1],16)),s)
  s=re.sub(r'%%[uUoOkK]','',s);s=re.sub('%%[dD]','°',s);s=re.sub('%%[cC]','Ø',s);s=re.sub('%%[pP]','±',s)
  return re.sub(r'\s+',' ',s).strip()
-TERMS={a.upper():b for a,b in (l.split('\t',1) for l in (BASE/'data/terms.tsv').read_text().splitlines() if '\t' in l)}
-EXACT=json.loads((BASE/'data/translations.json').read_text()) if (BASE/'data/translations.json').exists() else {}
-EXACT.update({clean(a).upper():b for a,b in (l.split('\t',1) for l in (BASE/'data/sentences.tsv').read_text().splitlines() if '\t' in l)})
+def table(path):
+ if not path.exists():return {}
+ return {a.upper():b for a,b in (line.split('\t',1) for line in path.read_text(encoding='utf-8').splitlines() if '\t' in line)}
+DATA=Path(os.environ.get('PID_DATA_ROOT',BASE))/'data'
+TERMS=table(BASE/'resources/terms.tsv');TERMS.update(table(DATA/'terms.tsv'))
+EXACT=json.loads((DATA/'translations.json').read_text(encoding='utf-8')) if (DATA/'translations.json').exists() else {}
+EXACT.update(table(DATA/'sentences.tsv'))
 EXACT={clean(k).upper().rstrip('. '):v for k,v in EXACT.items()}
 RE=re.compile(r'(?<![A-Za-z0-9_-])('+ '|'.join(re.escape(k) for k in sorted(TERMS,key=len,reverse=True))+r')(?![A-Za-z0-9_-])',re.I)
 def translate(s):
@@ -32,6 +36,6 @@ def residual(s):
  words=re.findall(r'(?<![\w-])[A-Za-z][A-Za-z\']{4,}(?![\w-])',t)
  return [w for w in words if w.upper() not in {'CNOOC','COOEC','WORLEY','ESSO','KELLOGG','HYUNDAI','NIPPON','MITSUBISHI','FLOWLINE'}]
 if __name__=='__main__':
- c=json.loads((BASE/'data/corpus.json').read_text());left=[(t,n) for t,n in c.items() if residual(t)]
- (BASE/'data/untranslated.txt').write_text('\n'.join(f'{n}\t{t}\t=> {translate(t)}' for t,n in sorted(left,key=lambda a:-a[1])))
+ c=json.loads((BASE/'data/corpus.json').read_text(encoding='utf-8'));left=[(t,n) for t,n in c.items() if residual(t)]
+ (BASE/'data/untranslated.txt').write_text('\n'.join(f'{n}\t{t}\t=> {translate(t)}' for t,n in sorted(left,key=lambda a:-a[1])),encoding='utf-8')
  print('residual',len(left))

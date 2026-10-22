@@ -50,6 +50,6 @@ def apply(source,localized):
  localized.write_text(''.join(result),encoding='utf-8')
  return count
 if __name__=='__main__':
- manifest=json.loads((BASE/'data/manifest.json').read_text());total=0
+ manifest=json.loads((BASE/'data/manifest.json').read_text(encoding='utf-8'));total=0
  for r in manifest:total+=apply(BASE/r.get('workingDxf',r['dxf']),BASE/'output'/r['id']/'中文图纸.dxf')
  print('Preserved original geometry in',len(manifest),'drawings;',total,'text records overlaid')

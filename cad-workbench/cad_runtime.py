@@ -15,7 +15,8 @@ def converter_status():
  system=platform.system();arch=platform.machine().lower();arch={'aarch64':'arm64','amd64':'x86_64'}.get(arch,arch)
  override=os.environ.get('PID_DWG_CONVERTER')
  candidates=[]
- if override:candidates=[Path(override).expanduser()]
+ if os.environ.get('PID_DISABLE_DWG_CONVERTER'):candidates=[]
+ elif override:candidates=[Path(override).expanduser()]
  elif not os.environ.get('PID_DISABLE_DWG_CONVERTER'):
   folder=BASE/'tools/converters'/f'{system.lower()}-{arch}'
   candidates=[folder/'ODAFileConverter.exe'] if system=='Windows' else [folder/'ODAFileConverter',folder/'ODAFileConverter.AppImage',folder/'ODAFileConverter.app/Contents/MacOS/ODAFileConverter']
