@@ -40,3 +40,15 @@ class FreshInstallHTTPTests(unittest.TestCase):
    with self.subTest(path=path):self.assertEqual(self.get(path)[0],404)
  def test_empty_catalog_has_onboarding(self):
   js=self.get('/app.js')[1].decode();self.assertIn('renderEmptyLibrary()',js);self.assertIn('上传第一张图纸',js)
+
+class VectorRenderingTests(unittest.TestCase):
+ def test_clean_install_renders_original_cad_handle(self):
+  import sys,ezdxf
+  from xml.etree import ElementTree as ET
+  sys.path.insert(0,str(BASE/'scripts'))
+  from build import render
+  doc=ezdxf.new();entity=doc.modelspace().add_line((1,1),(9,7))
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td);render(doc,root,'original',[0,0,10,10])
+   svg=ET.parse(root/'original.svg')
+   self.assertTrue(any(n.get('data-handle')==entity.dxf.handle for n in svg.iter()))

@@ -21,7 +21,11 @@ class RealCADPipelineTests(unittest.TestCase):
      deadline=time.monotonic()+240
      while time.monotonic()<deadline:
       state=s.state(admin);rows=state['uploads'] if kind=='upload' else state['drafts']['jobs'];job=next(x for x in rows if x['id']==id)
-      if job['status'] in ('complete','failed'):self.assertEqual(job['status'],'complete',job);return job
+      if job['status'] in ('complete','failed'):
+       if job['status']=='failed':
+        log=s.root/('uploads/'+id+'/import.log' if kind=='upload' else 'data/attribute-batches/'+id+'/build.log')
+        self.fail(str(job)+'\n'+(log.read_text(encoding='utf-8',errors='replace')[-5000:] if log.exists() else 'No worker log'))
+       return job
       time.sleep(.25)
      self.fail('CAD job timed out')
     job=wait_job('upload',job['id']);id=job['drawing'];viewer=s.login('viewer');drawing=s.request('/api/drawing/'+id,cookie=viewer)[1]

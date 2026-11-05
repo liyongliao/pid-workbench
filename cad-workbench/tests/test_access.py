@@ -65,3 +65,19 @@ class AccessHTTPTests(unittest.TestCase):
   self.assertEqual(status,200)
   for value in ('HttpOnly','SameSite=Strict','Max-Age=28800'):self.assertIn(value,headers['Set-Cookie'])
   self.assertEqual(self.s.request('/api/catalog',cookie=self.viewer)[2]['Cache-Control'],'no-store')
+
+class ContainerOriginTests(unittest.TestCase):
+ def test_only_declared_browser_origin_may_login_through_port_mapping(self):
+  import os
+  from unittest.mock import patch
+  origin='http://nas.example.test:19000'
+  with patch.dict(os.environ,{'PID_PUBLIC_ORIGINS':origin}):
+   service=Service()
+  try:
+   service.setup()
+   login={'role':'viewer','password':service.viewer_password}
+   headers={'Host':'nas.example.test:19000','Origin':origin}
+   self.assertEqual(service.request('/api/auth/login','POST',login,headers=headers)[0],200)
+   self.assertEqual(service.request('/api/auth/login','POST',login,headers=dict(headers,Origin='http://other.example.test'))[0],403)
+   self.assertEqual(service.request('/api/auth/login','POST',login,headers=dict(headers,Host='other.example.test'))[0],403)
+  finally:service.close()

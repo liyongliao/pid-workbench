@@ -35,3 +35,4 @@
 *.dylib
 未提供的关联DWG清单.txt
 cad-workbench/未提供的关联DWG清单.txt
+/docker/runtime/

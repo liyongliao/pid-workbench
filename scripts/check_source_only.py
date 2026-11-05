@@ -8,7 +8,7 @@ DENIED={'data','output','uploads','reports','tools','design','.venv','.runtime',
 def inspect(name,content):
  p=Path(name);issues=[]
  if DENIED.intersection(p.parts):issues.append('runtime or engineering directory')
- if p.suffix.lower() not in ALLOWED and p.name not in ('.gitignore','.gitattributes','pre-commit'):issues.append('unapproved file type')
+ if p.suffix.lower() not in ALLOWED and p.name not in ('.gitignore','.gitattributes','pre-commit','.dockerignore','Dockerfile'):issues.append('unapproved file type')
  if len(content)>1024*1024 or b'\x00' in content:issues.append('binary or oversized file')
  if re.search(rb'(?:github_pat_[A-Za-z0-9_]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)',content):issues.append('credential material')
  if re.search(rb'/(?:Users)/[^/\s]+/|C:\\(?:Users)\\[^\\\s]+\\',content):issues.append('personal absolute path')

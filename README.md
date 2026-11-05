@@ -94,3 +94,5 @@ python -m unittest discover -s cad-workbench/tests -p "test_*.py" -v
 GitHub Actions 在 Windows / Linux、Python 3.12 / 3.13 上运行权限和空库测试，另检查 JavaScript 语法及仓库文件边界。CAD 引擎实际执行能力需在目标平台验收。
 
 更多迭代内容见 [CHANGELOG.md](CHANGELOG.md)。
+
+容器部署与持久化挂载见 [NAS Docker 运行说明](docker/README.md)。

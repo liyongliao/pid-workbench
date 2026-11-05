@@ -30,7 +30,10 @@ class Handler(BaseHTTPRequestHandler):
    host=self.headers.get('Host','');origin=self.headers.get('Origin')
    local_address=self.connection.getsockname()[0]
    allowed_hosts={f'{address}:{self.server.server_port}' for address in ('127.0.0.1','localhost',local_address)}
-   if host not in allowed_hosts or (origin and origin!='http://'+host):
+   # Containers see a bridge address; trust only explicitly configured external origins.
+   public={entry.strip() for entry in os.environ.get('PID_PUBLIC_ORIGINS','').split(',') if entry.strip()}
+   origins={'http://'+value for value in allowed_hosts}|public
+   if not any(urllib.parse.urlsplit(o).netloc==host for o in origins) or (origin and (origin not in origins or urllib.parse.urlsplit(origin).netloc!=host)):
     self.send({'error':'管理请求校验失败，请刷新页面后重试'},403);return
    u=urllib.parse.urlparse(self.path)
    if u.path.startswith('/api/auth/'):
@@ -114,6 +117,7 @@ class Handler(BaseHTTPRequestHandler):
    if name not in allowed:self.send({'error':'无此清单'},404);return
    # Downloaded reports must point back to the serving computer, not the reader's localhost.
    origin=f'http://{self.connection.getsockname()[0]}:{self.server.server_port}'
+   origin=next((o.strip() for o in os.environ.get('PID_PUBLIC_ORIGINS','').split(',') if urllib.parse.urlsplit(o.strip()).netloc==self.headers.get('Host')),origin)
    report=(BASE/'reports'/name).read_bytes().replace(b'http://127.0.0.1:8765',origin.encode())
    self.send(report,ctype=('text/html; charset=utf-8' if name.endswith('.html') else 'text/plain; charset=utf-8'),filename=name if q.get('download') else None);return
   if p=='/api/health':self.send({'name':'cad-workbench','drawings':len(catalog),'version':VERSION,'instance':instance_id(BASE)});return
