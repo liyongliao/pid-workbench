@@ -1,7 +1,7 @@
 name: pid-workbench
 services:
   workbench:
-    image: pid-workbench:2.2.0-fnos
+    image: pid-workbench:2.3.0-fnos
     pull_policy: never
     restart: unless-stopped
     init: true

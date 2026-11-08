@@ -64,7 +64,7 @@ class AccessHTTPTests(unittest.TestCase):
   status,_,headers=self.s.request('/api/auth/login','POST',{'role':'viewer','password':self.s.viewer_password})
   self.assertEqual(status,200)
   for value in ('HttpOnly','SameSite=Strict','Max-Age=28800'):self.assertIn(value,headers['Set-Cookie'])
-  self.assertEqual(self.s.request('/api/catalog',cookie=self.viewer)[2]['Cache-Control'],'no-store')
+  self.assertEqual(self.s.request('/api/auth/session',cookie=self.viewer)[2]['Cache-Control'],'no-store')
 
 class ContainerOriginTests(unittest.TestCase):
  def test_only_declared_browser_origin_may_login_through_port_mapping(self):

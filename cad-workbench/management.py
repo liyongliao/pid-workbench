@@ -48,6 +48,10 @@ class Manager:
     ref={k:patch[k] for k in ('handle','code','key','xy','context')};d['references'].append(ref)
    valid=[t for t in patch['targets'] if t in self.catmap and t!=d['id']]
    ref.update(targets=valid,preferredTarget=patch['preferredTarget'] if patch['preferredTarget'] in valid else next(iter(valid),None),alternatives=[t for t in valid if t!=patch['preferredTarget']],selfReference=False,resolution='手动关联' if valid else '手动标记为未关联',manual=True,note=patch.get('note',''))
+  # Calculated once per committed library refresh, never per reader.
+  def digest(value):return hashlib.sha256(json.dumps(value,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+  self.ref_versions={r['id']:digest(r['references']) for r in self.catalog}
+  self.library_version=digest([self.catalog,self.overrides['revision'],[(r['id'],r.get('workingDxf')) for r in self.manifest.values()]])
   self.report=self.missing_report()
   self.export_report()
  def drawing(self,id):return read_json(self.base/'output'/id/'drawing.json')
@@ -114,7 +118,9 @@ class Manager:
    key=signature(id,handle,code);before=self.overrides['links'].get(key)
    if data.get('action')=='restore':self.overrides['links'].pop(key,None)
    else:self.overrides['links'][key]={'drawing':id,'handle':handle,'code':code,'key':kk[0],'context':ref['context'] if ref else code,'xy':xy,'targets':targets,'preferredTarget':preferred,'note':str(data.get('note',''))[:1000],'updatedAt':stamp()}
-   self.overrides['revision']+=1;self.overrides['history'].append({'time':stamp(),'key':key,'before':before,'after':self.overrides['links'].get(key)})
+   from change_log import link_value
+   auto=next((r for d in self.base_catalog if d['id']==id for r in d['references'] if r['handle']==handle and r['code']==code),None)
+   self.overrides['revision']+=1;self.overrides['history'].append({'time':stamp(),'key':key,'actor':data.get('_actor','管理员'),'from':link_value(ref),'to':link_value(self.overrides['links'].get(key) or auto),'before':before,'after':self.overrides['links'].get(key)})
    write_json(self.override_path,self.overrides);self.reload();return {'revision':self.overrides['revision'],'missingUnique':self.report['missingUnique']}
  def upload(self,stream,length,meta):
   filename=str(meta.get('filename',''))
@@ -141,7 +147,7 @@ class Manager:
    if not re.fullmatch(rb'AC10[0-9]{2}',header):raise ValueError('文件不是有效的 DWG，不能仅修改扩展名后上传')
    existing=next((r for r in self.manifest.values() if r['sha256']==digest.hexdigest()),None)
    if existing:raise ValueError('此 DWG 已在目录中：'+existing['code']+'。请直接编辑关联。')
-   job={'id':id,'filename':filename,'code':code,'title':title,'platform':platform,'sha256':digest.hexdigest(),'source':str(path.relative_to(self.base.parent)),'createdAt':stamp(),'status':'queued','message':'已接收，准备转换 CAD'}
+   job={'id':id,'actor':meta.get('_actor','管理员'),'filename':filename,'code':code,'title':title,'platform':platform,'sha256':digest.hexdigest(),'source':str(path.relative_to(self.base.parent)),'createdAt':stamp(),'status':'queued','message':'已接收，准备转换 CAD'}
    write_json(self.base/'data/upload-jobs'/f'{id}.json',job)
    threading.Thread(target=self.run_import,args=(id,),daemon=True).start();return job
   except:

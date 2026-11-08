@@ -42,16 +42,33 @@ class RealCADPipelineTests(unittest.TestCase):
     reference=next(r for r in drawing['references'] if r['code']=='CEPD-PR-9998');self.assertEqual(reference['preferredTarget'],second_id)
     reverse=s.request('/api/drawing/'+second_id,cookie=viewer)[1];self.assertTrue(any(id in r['targets'] for r in reverse['references']))
     self.assertFalse(any(g['key']=='CEPD-PR-9998' for g in s.request('/api/missing-references',cookie=viewer)[1]['groups']))
+    path='/api/drawing/'+id;vpath='/output/'+id+'/chinese.svg'
+    validator=lambda p:s.request(p,cookie=viewer)[2]['ETag']
+    check_tag=lambda p,t:s.request(p,cookie=viewer,headers={'If-None-Match':t})[0]
+    previous=validator(path);svg_tag=validator(vpath)
+    self.assertEqual(check_tag(path,previous),304);self.assertEqual(check_tag(vpath,svg_tag),304)
+    self.assertEqual(s.request(vpath,headers={'If-None-Match':svg_tag})[0],401)
     link={'revision':s.state(admin)['revision'],'drawing':id,'handle':reference['handle'],'code':reference['code'],'targets':[second_id],'preferredTarget':second_id,'note':'合成测试关联说明'}
     self.assertEqual(s.post_admin('/api/admin/link',link,admin)[0],200)
+    self.assertEqual(check_tag(path,previous),200);self.assertEqual(check_tag(vpath,svg_tag),304)
     self.assertTrue(any(r.get('manual') and r.get('preferredTarget')==second_id for r in s.request('/api/drawing/'+id,cookie=viewer)[1]['references']))
     item=next(x for x in drawing['items'] if x['entity']=='INSERT');info=s.request('/api/admin/attributes?'+urllib.parse.urlencode({'drawing':id,'handle':item['handle']}),cookie=admin)[1]
     rows=info['attributes'];next(a for a in rows if a['key']=='IN_SERV')['value']='合成测试用途更新';rows.append({'key':'TEST_NOTE','label':'测试备注','value':'合成属性','new':True,'visible':False,**info['placement']})
     payload={'drawing':id,'handle':item['handle'],'revision':info['revision'],'draftRevision':info['draftRevision'],'attributes':rows}
     self.assertEqual(s.post_admin('/api/admin/attributes',payload,admin)[0],200)
+    previous=validator(path)
+    self.assertEqual(check_tag(vpath,svg_tag),304)
     before=s.request('/download/'+id+'/dwg',cookie=viewer)[1]
     self.assertEqual(s.state(admin)['drafts']['blockCount'],1)
     status,batch,_=s.post_admin('/api/admin/attributes/publish',{'counter':s.state(admin)['drafts']['counter']},admin);self.assertEqual(status,202,batch);wait_job('batch',batch['id'])
     after=s.request('/download/'+id+'/dwg',cookie=viewer)[1];self.assertNotEqual(hashlib.sha256(before).digest(),hashlib.sha256(after).digest());self.assertEqual(s.request('/download/'+id+'/original',cookie=viewer)[1],original)
     updated=s.request('/api/drawing/'+id,cookie=viewer)[1];attrs=next(x for x in updated['items'] if x['handle']==item['handle'])['attributes'];self.assertEqual(next(a for a in attrs if a['key']=='TEST_NOTE')['value'],'合成属性');self.assertEqual(s.state(admin)['drafts']['blockCount'],0)
+    self.assertEqual(check_tag(path,previous),200);self.assertEqual(check_tag(vpath,svg_tag),200)
+    logs=s.request('/api/admin/change-log',cookie=admin)[1]['records']
+    self.assertTrue({'导入图纸','暂存块属性','发布块属性','修改关联'}<={r['type'] for r in logs})
+    published=next(r for r in logs if r['type']=='发布块属性')
+    changes={c['field']:c for c in published['changes']}
+    self.assertIsNone(changes['TEST_NOTE']['before']);self.assertEqual(changes['TEST_NOTE']['after']['value'],'合成属性')
+    self.assertNotEqual(changes['IN_SERV']['before']['value'],changes['IN_SERV']['after']['value'])
+    self.assertEqual(s.request('/api/admin/change-log',cookie=viewer)[0],403)
    finally:s.close()
