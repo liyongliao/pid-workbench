@@ -9,4 +9,8 @@ requirements=BASE/'requirements.txt';marker=folder/'requirements.installed'
 if not marker.exists() or marker.read_bytes()!=requirements.read_bytes():
  print('首次启动：正在安装本机 Python 依赖，之后启动无需重复安装。',flush=True)
  subprocess.run([str(python),'-m','pip','install','-r',str(requirements)],check=True);marker.write_bytes(requirements.read_bytes())
-subprocess.run([str(python),'-X','utf8',str(BASE/'launch.py')],check=True,env=dict(os.environ,PYTHONUTF8='1'))
+if os.name=='nt':
+ subprocess.run([str(python),'-X','utf8',str(BASE/'launch.py')],check=True)
+else:
+ vault=Path(os.environ.get('PID_VAULT',BASE.parent.parent/'工作台资料盘')).resolve()
+ subprocess.run([str(python),'-X','utf8',str(BASE/'desktop.py')],check=True,env=dict(os.environ,PID_VAULT=str(vault),PYTHONUTF8='1'))

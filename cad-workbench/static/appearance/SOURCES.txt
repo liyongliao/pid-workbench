@@ -1,0 +1,8 @@
+The daylight panorama is Kloofendal 48d Partly Cloudy Pure Sky from Poly Haven (CC0).
+https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky
+The deck, steel and enamel maps use the offline offshore-arena appearance pack derived from ambientCG (CC0).
+https://ambientcg.com/view?id=DiamondPlate008A
+https://ambientcg.com/view?id=Metal032
+https://ambientcg.com/view?id=PaintedMetal012
+Water normals are from the procedural offshore-arena ocean-normal texture.
+HDRLoader.js is from the Three.js distribution (MIT, see the bundled Three.js license).

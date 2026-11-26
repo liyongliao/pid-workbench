@@ -25,7 +25,8 @@ def entities(doc):
  return out
 
 def work(r):
- errors=[];source=BASE.parent/r['source'];a=ezdxf.readfile(BASE/r.get('workingDxf',r['dxf']));b=ezdxf.readfile(BASE/'output'/r['id']/'中文图纸.dxf');c=ezdxf.readfile(BASE/r.get('workingRoundtrip',f"data/roundtrip-check/{r['id']}/中文图纸.dxf"))
+ from vault import original
+ errors=[];source=original(BASE,r);a=ezdxf.readfile(BASE/r.get('workingDxf',r['dxf']));b=ezdxf.readfile(BASE/'output'/r['id']/'中文图纸.dxf');c=ezdxf.readfile(BASE/r.get('workingRoundtrip',f"data/roundtrip-check/{r['id']}/中文图纸.dxf"))
  if hashlib.sha256(source.read_bytes()).hexdigest()!=r['sha256']:errors.append('原始DWG哈希改变')
  ma,mb,mc=[entities(d) for d in (a,b,c)]
  for label,other in [('中文DXF',mb),('中文DWG回读',mc)]:

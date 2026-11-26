@@ -14,8 +14,17 @@
 !cad-workbench/tests/*.py
 !docker/
 !docker/runtime/
-!docker/runtime/oda.deb
+
 !docker/runtime/NotoSansCJKsc-Regular.otf
 !docker/runtime/OFL.txt
 
 !docker/oda-headless.sh
+
+!cad-workbench/static/three-LICENSE.txt
+
+!cad-workbench/static/login-art.webp
+!cad-workbench/static/appearance/
+!cad-workbench/static/appearance/*.js
+!cad-workbench/static/appearance/*.webp
+!cad-workbench/static/appearance/*.hdr
+!cad-workbench/static/appearance/SOURCES.txt

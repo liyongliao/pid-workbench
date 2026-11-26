@@ -1,0 +1,24 @@
+.legend-detail:empty{display:none}
+.legend-detail,.legend-guide{--legend-accent:#ae431d;--legend-rule:#e8e4df}
+.legend-detail{margin:16px 0;padding:12px 14px;border:1px solid var(--legend-rule);border-radius:10px;background:#fcfbf9}
+.legend-heading,.legend-summary,.legend-nav{display:flex;align-items:center;gap:10px}
+.legend-heading{justify-content:space-between}
+.legend-detail h3,.legend-guide h3{margin:0;font-size:15px}
+.legend-heading button,.legend-nav button{font:inherit;padding:5px 10px}
+.legend-summary{margin:10px 0 5px}
+.legend-symbol{display:inline-block;width:100px;height:21px;background:white url('/project-legends/valves.png') no-repeat 0 0 /100px 147px;vertical-align:middle;border-radius:3px}
+.legend-v2{background-position-y:-21px}.legend-v3{background-position-y:-42px}.legend-v4{background-position-y:-63px}.legend-v5{background-position-y:-84px}.legend-v6{background-position-y:-105px}.legend-v7{background-position-y:-126px}
+.legend-detail dl,.legend-guide dl{margin:4px 0 8px}
+.legend-detail dl>div,.legend-guide dl>div{display:grid;grid-template-columns:minmax(5em,25%) minmax(0,1fr);gap:8px;padding:7px 0;border-top:1px solid var(--legend-rule);line-height:1.5;font-size:14px}
+.legend-detail dt,.legend-guide dt{color:#595954}
+.legend-detail dd,.legend-guide dd{margin:0;overflow-wrap:anywhere}
+.legend-result dd b{color:var(--legend-accent);margin-right:9px}
+.legend-detail a,.legend-guide a{color:var(--legend-accent);text-underline-offset:3px}
+.legend-guide .legend-nav{margin-bottom:15px}.legend-nav [aria-pressed=true]{color:var(--legend-accent);background:#f9eee6}
+.legend-search-label{display:block;margin:0 0 5px;color:#605d58;font-size:13px}
+.legend-guide input{width:100%;padding:9px 11px;margin-bottom:12px}
+.legend-guide details,.legend-guide section{padding:10px 0;border-top:1px solid var(--legend-rule)}
+.legend-guide summary{cursor:pointer;font-weight:600}.legend-guide small{color:#696660}
+.legend-guide .legend-pages{display:flex;flex-wrap:wrap;gap:9px 16px;margin:10px 0}
+#dialog:has(.legend-guide){width:min(720px,94vw)}
+.legend-guide .legend-symbol{margin-left:8px}

@@ -1,98 +1,64 @@
-# PID 图纸工作台
+# 多专业工程图纸工作台
 
-本地运行的中文 CAD 图纸查看与管理系统。读取 DWG 原始图元，建立设备查询、跨图跳转和中文副本；不通过 PDF 或 OCR 重建图纸。
+工艺、动力、机械、电气图纸共同查看，编辑按个人账号及专业授权。图号、平台、专业及修订均独立。设备位号优先检索，原中图切换保持视口，多目标引用供用户选择。PDF 是导出格式。
 
-**源码仓库不包含任何工程图纸、派生矢量图、设备台账、原始因果表、账户密码或本机运行包。** 全新运行时图纸库为空，数据由管理员在本机导入。
+Mac 安装版双击“启动图纸工作台.command”；旧版迁入后的管理员首次登录以现有密码登记姓名，随后在右上角“编辑账号与专业授权”管理人员。原生网页入口 production.py，独立转换进程 worker.py。两个进程使用同一个 PID_VAULT。Mac 的 desktop.py 管理本机双进程。Windows 旧版查看入口作为兼容路径保留，3.0 的受控发布目标是 Mac 和 Linux。
 
-## 使用功能
+源码、运行环境、资料盘和备份分别维护。原始 DWG 按 SHA-256 只读保存；浏览读已发布 SVG 和索引。SQLite 记录账号、专业、任务和生效修订。批量发布先生成并回读校验 DWG，再整体切换。后台中断后继续处理队列，网页服务独立重启。初次迁移、备份恢复和 Linux 离线部署见 [Linux 部署说明](docker/README.md)。
 
-- 普通用户 / 管理员两种密码登录；服务端保护图纸、下载及管理接口。
-- 中文 / 原文切换保持缩放和位置；全屏、网页大屏、设备点击查询。
-- 收藏 / 最近浏览按图纸库和登录身份保存在当前浏览器，最多 100 个收藏和 20 条最近记录。
-- 图名、图号、位号和拼音检索；图内关联跳转及按平台生成缺图清单。
-- 上传 DWG；手动指定跨图目标；编辑及新增 CAD 块属性。
-- 多块、多图暂存后统一生成 DWG，回读检查图元及属性；失败保留已发布版本与草稿。
-- 空库引导和运行环境诊断；缺少引擎时可查看已有图纸、暂存属性，导入前说明所缺依赖。
+专业字段由资料盘根目录的 profiles.json 配置。未配置时工艺沿用已验证规则；其他专业提供 CAD 块属性与通用 TAG，只在有代表性 DWG 并回读验证后启用现场映射。例如：
+```json
+{"机械":{"codePattern":"[A-Z0-9-]+","tagFields":["TAG"],"searchFields":["TAG","DESCRIPTION"],"attributeLabels":{"TAG":"设备位号","DESCRIPTION":"说明"}}}
+```
+规则在新导入或重新生成时生效，不改写原图。工程资料、密码文件及转换器不进入源码仓库。
 
-## 启动
+## 源码与现场文件
 
-源码版需要 **Python 3.12 或更新版本**。Windows 双击 `启动工作台-Windows.cmd`；macOS / Linux 运行：
+源码仓库包含应用、导入及审查工具、测试与部署模板。运行现场版本时单独配置资料盘、转换器和字体。精细装配、工程建模依据、标定数据和平台专用视角从本机安装的项目配置读取。没有项目配置时，联动视口按图纸生成示意模型，平台模型按自身边界显示全景。现场装配模块属于项目资料。移机请同时备份本机项目配置与资料盘。
 
-```sh
-./启动工作台.sh
+## 现场复验
+
+在已安装依赖及引擎的 Mac 或 Linux 上，用同一个 Python 环境运行 `python tests/accept_vault.py 资料盘 图纸内部ID 可编辑块句柄`。可通过 `--work-dir` 指定有足够空间的本地临时目录。工具备份并恢复到临时副本，使用临时账户演练 15 人热缓存查询、重复提交、进程中断、事务中断、两人编辑冲突及回滚。现场负载、存储类型和图纸复杂度会影响结果。启动前配置 PID_DWG_CONVERTER 和 PID_CAD_FONT。
+
+## 三维联动
+
+打开或切换图纸时，三维视口按当前 P&ID 的管段、阀门、设备和仪表自动组装。点选任一侧可查同一 CAD 图元，双击模型或使用“聚焦所选”查看零件细节。模型高度和尺寸用于读图。资料盘的 `models/blocks` 保存离线零件目录与按内容校验的几何文件。复制到另一台工作台即可复用。缺少相应零件时使用内置构件。
+
+如需查看完整平台，可在三维视口的来源菜单主动选择平台参考，再使用“局部精查”读取附近构件。
+
+平台模型在资料盘 models 目录。导入工具 scripts/import_platform_model.py 接受已转换且带 sourceId 的完整 GLB 分块目录、资料盘、平台标识 k/l 和对应原始 NWD。导入后重载网页即可看到模型；源工程文件及生成的模型索引均独立于代码。K / L 的高精展示资源使用项目已有的工程转换成果。
+
+对 CEPK 或 WHPL 图纸，系统按所属平台和唯一精确位号关联。来源模型只有支路内阀门序号时，可在管理模式点选该平台图元，在属性栏选择模型构件并确认。一个构件对应多个图元时列出位置供选择。修改记录进入工作台审计。
+
+### NWD 模型审查与网页调用
+
+工作台顶部的 **数字孪生** 可独立浏览 K / L 完整平台，切换甲板、下层及全模型视角。在同页导航选择 **NWD 模型审查** 即可进入当前平台的审查工作区。视图栏列出原始 NWD 中提取的审查相机。模型浏览器按源文件、组及构件展开，可以搜索、独立显示子层、隔离、恢复已移除节点。用管理员账号发布当前图层、相机、剖切、项目视图与批注。多人同时编辑时，过期版本会提示冲突。
+
+同一工作台下的页面可以嵌入最新版。调用者沿用现有登录会话。
+
+```html
+<iframe src="/nwd.html?model=l&amp;embed=1"
+        title="L 平台发布模型" width="100%" height="600" allowfullscreen></iframe>
 ```
 
-首次启动创建平台独立虚拟环境并安装锁定依赖，之后复用。也可手动启动：
+管理员从「数字孪生 → NWD 模型审查 → 更多 → 导入模型」选择 NWD 或静态 GLB。转换在工作台本机执行。导入完成后选「打开模型」。相同源文件复用已有模型和版本；上传进度在刷新后仍可查看。两种模式共用模型编号、构件树和发布版本。「模型浏览器 → 移除 → 更多 → 发布版本」会在最新总览中同步移除对应子树。「已移除 → 恢复」后再次发布即可恢复。
+
+工作台内置离线 NWD 读取器，可直接处理已支持的 lichunk-008 构件树、几何、实例、材质和保存视图。遇到不支持的文件布局时会保留源件并显示具体原因。Mac 需要扩展转换器时运行 `zsh scripts/install-nwd-macos.sh` 安装 .NET 8 和 NwcIO。也可通过 `PID_NWD_CONVERTER` 指定已安装的 nwcio 可执行文件。新版 worker 镜像构建时包含该转换器。等待扩展转换器的任务会在引擎就绪后继续，静态 GLB 可直接入库。导入保留可解析的几何和构件层级，网页编辑保存为项目版本。原件保存在资料盘的 model-imports 目录。
+
+把 `model` 改为 `k` 可显示 K 平台。分享菜单可复制带 `rev` 的固定版本链接。在数字孪生的 NWD 审查页打开「更多 → 分享模型」可复制供其他项目页面使用的嵌入代码。项目版本存放在资料盘的 SQLite 数据库。源 NWD 保留；移除和隐藏作用于网页发布版本。源预设恢复相机，原 Navisworks 批注、视点专属外观覆盖及碰撞结果尚未导入。两点距离按模型坐标单位显示。
+
+网页使用本地 Three.js 与资料盘中的模型分块。迁移时一并复制模型目录下的 `editor` 子目录。需要从已有项目源文件重建时，运行：
 
 ```sh
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS / Linux: source .venv/bin/activate
-python -m pip install -r cad-workbench/requirements.txt
-python -X utf8 cad-workbench/launch.py
+python cad-workbench/scripts/prepare_nwd.py <资料盘/models/l> <platform-l.hierarchy.json> <原始.nwd>
 ```
 
-在服务所在电脑打开启动器给出的地址（默认 `http://127.0.0.1:8765`），设置管理员和普通用户各自的密码。两个密码必须不同且至少 8 个字符；没有默认密码。局域网用户不能执行首次设置。
+此命令读取已入库且带源节点编号的 GLB 分块、同版源模型树与原始 NWD。全景先加载概览，靠近构件后读取完整细节。设置可切换到可见区域原始精度。
 
-已有离线运行包可放回 `cad-workbench/tools/`；Windows 启动入口优先使用其中的嵌入式 Python。源码仓库不重新分发第三方引擎或 Python 二进制。
+同格式的新工程可用 `--parts <GLB分块目录> --name <显示名称>` 写入独立的 `models/<模型编号>`，重载审查页即可在模型菜单切换。模型编号使用小写字母、数字、连字符或下划线。
 
-## DWG 引擎与字体
+### 逐图 Agent 建模与审核
 
-管理员打开右上角 **管理员 → 运行环境** 查看检查结果。
+在「项目工具 → 管理模式 → 图纸建模」中选择一张图纸，点击「复制本图建模任务」，粘贴到 PID 项目中的 Agent 会话。任务包含图号、源图版本校验值、建模要求以及同版退回意见。Agent 逐图检查原图、完成装配并验证实际渲染，参照已审核样图的细度提交草稿。
 
-原生 DWG 导入及生成需要本机 ODA File Converter 完整运行包。按其许可从 [ODA 官方页面](https://www.opendesign.com/guestfiles/oda_file_converter) 获取，并放到对应目录，或设置 `PID_DWG_CONVERTER` 指向可执行文件：
-
-| 环境 | 相对于 cad-workbench 的位置 |
-| --- | --- |
-| Windows x64 | `tools/converters/windows-x86_64/ODAFileConverter.exe` |
-| macOS Apple Silicon | `tools/converters/darwin-arm64/ODAFileConverter.app/Contents/MacOS/ODAFileConverter` |
-| macOS Intel | `tools/converters/darwin-x86_64/ODAFileConverter.app/Contents/MacOS/ODAFileConverter` |
-| Linux x64 | `tools/converters/linux-x86_64/ODAFileConverter` |
-
-保留引擎运行包所需的 DLL、插件等完整目录。中文字体可放置于 `tools/fonts/NotoSansCJKsc-Regular.otf`，或用 `PID_CAD_FONT` 指向已有中文字体；macOS 也会检查系统 Arial Unicode。未配置字体时不会偷偷替换成不支持中文的字体。
-
-仓库自带通用仪表术语。可在本机 `data/terms.tsv`、`data/sentences.tsv` 和 `data/translations.json` 扩充术语；后两者用于精确译文。它们均不进入 Git。未知内容保留原文，不能把自动处理理解为工程审定。
-
-当前图号识别保留原系统的 CEP、CEPD、CEPK、PRP、WHP 等平台规则，非该体系的图号需扩展 `scripts/references.py`；不宣称能正确识别任意行业编号。
-
-## 数据与迁移
-
-默认工作目录为 `cad-workbench`。`PID_DATA_ROOT` 可设置为独立的库目录；静态页面始终从程序目录读取，数据目录无需复制程序文件。
-
-| 本机目录 | 用途 |
-| --- | --- |
-| `data/` | 索引、密码哈希、术语、属性草稿、修改记录及回读验证 |
-| `uploads/` | 用户上传的原始 DWG 和导入记录 |
-| `output/` | 中文 DWG/DXF、原文/中文矢量图和设备索引 |
-| `reports/` | 缺失关联清单 |
-
-升级前停止服务并备份以上目录，更新源码后保留它们；旧项目还需保留原始 DWG 的相对路径。不要把自己的数据复制到 `resources/` 或 `static/`。密码哈希随库保留，服务重启后用户重新登录。
-
-- `PID_PORT`：指定端口；未指定时启动器尝试 8765—8774。
-- `PID_HOST`：监听地址，默认 `0.0.0.0`；设为 `127.0.0.1` 则仅限本机。
-- `PID_NO_BROWSER=1`：启动后不打开浏览器。
-- `PID_DISABLE_DWG_CONVERTER=1`：明确禁用转换，包括配置过的引擎路径。
-
-局域网用户访问 `http://服务器IPv4:端口`，服务器防火墙只需向可信本地子网放行该 TCP 端口。当前服务使用 HTTP，应部署在可信局域网，未提供直接公网托管能力。
-
-管理员可在账户菜单修改两种访问密码，改密撤销所有登录会话。忘记密码时，停止服务后运行 `python -X utf8 cad-workbench/scripts/reset_access_password.py`；如使用独立库，保留相同的 `PID_DATA_ROOT`。
-
-## 验证
-
-以下检查不需要实际工程图纸或 ODA：
-
-```sh
-python scripts/check_source_only.py
-node --test tests/library.test.js
-python -m unittest discover -s cad-workbench/tests -p "test_*.py" -v
-```
-
-可选真实 DWG 集成测试：配置本机引擎和中文字体，设置 `PID_TEST_DWG=1`，再执行相同测试命令。测试在临时目录用代码创建全新的简单 CAD，验证上传、中文提取、属性新增、统一发布和原始文件保留，不读取任何实际工程图纸。无引擎的 CI 会明确跳过此项。
-
-提交前建议执行 `git config core.hooksPath .githooks`，启用本仓库的源码边界检查。CI 也执行相同检查。
-
-GitHub Actions 在 Windows / Linux、Python 3.12 / 3.13 上运行权限和空库测试，另检查 JavaScript 语法及仓库文件边界。CAD 引擎实际执行能力需在目标平台验收。
-
-更多迭代内容见 [CHANGELOG.md](CHANGELOG.md)。
-
-容器部署与持久化挂载见 [NAS Docker 运行说明](docker/README.md)。
+已有草稿可在「对照原图审核」中查看、通过上线或退回。后台已停用 API 自动生成与重试。旧版保存的接口配置仍存在于原资料盘及备份中。

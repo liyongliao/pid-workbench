@@ -1,28 +1,40 @@
 name: pid-workbench
+x-service: &service
+  platform: linux/amd64
+  pull_policy: never
+  init: true
+  restart: unless-stopped
+  user: "1000:1000"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,mode=1777
+    - /home/workbench:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700
+x-vault: &vault
+  type: bind
+  source: "${PID_VAULT_DIR:?set the local data volume}"
+  target: /vault
+  bind: {create_host_path: false}
 services:
   workbench:
-    image: pid-workbench:2.3.0-fnos
-    pull_policy: never
-    restart: unless-stopped
-    init: true
-    user: "1000:1000"
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    tmpfs:
-      - /tmp:rw,nosuid,nodev,mode=1777
-      - /home/workbench:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700
-    ports:
-      - "${PID_BIND_IP:-127.0.0.1}:${PID_PUBLISHED_PORT:-8765}:8765"
+    <<: *service
+    image: pid-workbench-web:3.2.0
+    ports: ["${PID_BIND_IP:-127.0.0.1}:${PID_PUBLISHED_PORT:-8765}:8765"]
     environment:
-      PID_PUBLIC_ORIGINS: "${PID_PUBLIC_ORIGINS:?set the trusted browser origin including scheme and port}"
+      PID_PUBLIC_ORIGINS: "${PID_PUBLIC_ORIGINS:?set trusted browser origins}"
+    volumes: [*vault]
+  worker:
+    <<: *service
+    image: pid-workbench-worker:3.2.0
+    command: ["python","worker.py"]
+    healthcheck:
+      test: ["CMD","python","-c","import sqlite3,time; s=sqlite3.connect('/vault/workbench.sqlite3').execute('select stamp from heartbeat').fetchone(); assert s and time.time()-s[0]<25"]
+      interval: 15s
     volumes:
+      - *vault
       - type: bind
-        source: "${PID_LIBRARY_DIR:?set the absolute library parent directory}"
-        target: /library
+        source: "${PID_ENGINE_DIR:?set the licensed Linux converter directory}"
+        target: /engine
         read_only: true
-        bind: {create_host_path: false}
-      - type: bind
-        source: "${PID_LIBRARY_DIR}/cad-workbench"
-        target: /library/cad-workbench
         bind: {create_host_path: false}

@@ -35,4 +35,7 @@ def decorate(data,base,record,doc,previous=None):
    ledgers[t['handle']]=t
   data['translations']=list(ledgers.values())
 
+ from disciplines import apply
+ apply(record,data)
+
 def search_extra(data):return ' '.join(a['label']+' '+a['value'] for i in data['items'] for a in i['attributes'])

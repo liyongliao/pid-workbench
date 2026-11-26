@@ -1,2 +1,46 @@
-*{box-sizing:border-box}body{margin:0;color:#28312c;font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;background:#faf9f6}button,input{font:inherit}button,a,input{outline-offset:4px}button{cursor:pointer}a{color:inherit;text-decoration:none}[hidden]{display:none!important}.login-shell{min-height:100vh;display:grid;grid-template-columns:1.05fr 1fr}.intro{padding:52px 10%;display:flex;flex-direction:column;justify-content:space-between;background:#eef0e9;position:relative;overflow:hidden}.intro:after{content:"";position:absolute;width:650px;height:650px;right:-360px;bottom:-360px;border:1px solid #d8ddd0;border-radius:50%;box-shadow:0 0 0 55px #e7eadf,0 0 0 56px #d8ddd0;pointer-events:none}.brand{font-size:21px;letter-spacing:1px}.brand:first-letter{color:#cd6537}.eyebrow{font-size:12px;letter-spacing:2px;color:#687064}.intro h1{font-size:clamp(34px,3.4vw,54px);line-height:1.4;letter-spacing:-1px;font-weight:550;margin:22px 0}.intro p{font-size:17px;line-height:1.9;color:#697168}.diagram{display:flex;align-items:center;margin-top:48px;max-width:420px;font-size:12px;color:#687064}.diagram span{padding:14px;border:1px solid #cdd4c6;border-radius:5px;background:#f4f5f0;white-space:nowrap}.diagram i{flex:1;min-width:15px;height:1px;background:#aeb9a3}.intro small{color:#788170;font-size:12px;z-index:1}.login-panel{padding:48px 10% 25px;display:flex;flex-direction:column;justify-content:center;position:relative}.form-wrap{width:100%;max-width:390px;margin:32px auto 64px}h2{font-size:28px;letter-spacing:-.5px;margin:14px 0}.muted{font-size:14px;line-height:1.7;color:#7b8077;margin-bottom:28px}.role-tabs{display:grid;grid-template-columns:1fr 1fr;padding:4px;background:#edeee8;border-radius:8px;margin-bottom:24px}.role-tabs button{border:0;padding:11px;background:transparent;color:#73796f;border-radius:5px}.role-tabs .selected{background:white;color:#26332d;box-shadow:0 1px 5px #20302012;font-weight:600}label{display:block;font-size:13px;font-weight:500;margin:17px 0}input[type=password],input[type=text]{display:block;width:100%;margin-top:9px;border:1px solid #d9ddd4;border-radius:6px;background:#fff;padding:13px 14px;color:#26332d}input:focus{outline:2px solid #cc693c44;border-color:#c66a40}.show-password{display:flex;align-items:center;gap:7px;color:#7b8077;font-size:12px;margin:14px 0 24px}.primary{background:#be5c32;color:#fff;border:0;border-radius:6px;padding:14px;width:100%;font-weight:600}.primary:hover{background:#a84e28}.primary:disabled{opacity:.6;cursor:wait}.footnote{font-size:12px;line-height:1.9;color:#8a8f85;margin-top:27px;border-top:1px solid #e4e6df;padding-top:22px}.error{color:#b3422a;font-size:13px;line-height:1.6;min-height:20px}.login-footer{text-align:center;font-size:11px;color:#999e94;position:absolute;bottom:24px;left:0;right:0}@media(max-width:800px){.login-shell{grid-template-columns:1fr}.intro{padding:28px 8%}.intro>div,.intro>small{display:none}.login-panel{padding:24px 8% 60px}.form-wrap{margin:16px auto 32px}}@media(max-height:760px) and (min-width:801px){.login-panel{padding-top:20px}.form-wrap{margin-top:0;margin-bottom:20px}#setupForm label{margin:10px 0}#setupForm input{padding:9px}#setupForm~.footnote{margin-top:10px;padding-top:10px}}
-.intro>div{position:relative;z-index:1}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{--orange:#d65316;min-height:100dvh;margin:0;display:flex;flex-direction:column;background:#faf8f6;color:#252b2e;font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+button,input{font:inherit}button,summary{cursor:pointer}
+:focus-visible{outline:2px solid #b8441d;outline-offset:3px}
+.sr-only,.project-name{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:-1px;padding:0;border:0}
+
+.mast{height:clamp(56px,9.8vh,94px);flex:none;display:flex;align-items:center;padding-inline:2.8vw;border-bottom:1px solid #d8d4cf}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;font-weight:650;font-size:clamp(20px,1.9vw,32px);color:inherit}
+.mark{display:grid;grid-template-columns:repeat(2,1em);gap:2px;font-size:.63em}
+.mark i{height:1em;background:var(--orange)}.mark i:first-child{border-radius:0 0 6px 0}.mark i:last-child{border-radius:6px 0 0 0}
+.login-shell{flex:1;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+.intro{position:relative;overflow:hidden;background:#faf8f5}
+.intro .project-name{position:static;clip-path:none;white-space:normal;width:auto;height:auto;margin:10%;color:#33434a}
+.intro.has-art{background:#faf8f5 url("/login-art.webp") center / contain no-repeat}
+.intro.has-art .project-name{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.login-panel{display:flex;align-items:center;justify-content:center;background:white;padding:clamp(32px,5vh,64px) clamp(25px,3vw,58px)}
+.form-wrap{width:100%;max-width:392px}
+h2{font-size:clamp(26px,2.4vw,36px);margin:0 0 24px;line-height:1.15;letter-spacing:.015em}
+.muted,.recovery p{color:#676b69;font-size:14px}.muted{margin:0 0 26px}
+.role-tabs{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #bdbfc1;border-radius:7px;margin-bottom:22px}
+.role-tabs button{position:relative;min-height:44px;border:0;border-right:1px solid #c9c9c9;background:transparent;color:#292c2d;font-size:15px}
+.role-tabs button:first-child{border-radius:6px 0 0 6px}.role-tabs button:last-child{border:0;border-radius:0 6px 6px 0}
+.role-tabs [aria-pressed=true]{background:#fff8f2;color:#c4480c;box-shadow:0 0 0 1px var(--orange);font-weight:650}
+label{display:block;margin:14px 0 6px;font-size:14px;font-weight:550}
+input{width:100%;border:1px solid #c5c6c7;border-radius:8px;padding:11px 13px;color:#272c2e;background:white}
+label input{display:block;margin-top:6px}
+.password-row{position:relative}.password-row input,.primary{min-height:46px;font-size:16px}
+.password-row input{padding-inline:3.35em 50px}
+.password-row:before,.password-row:after{content:"";position:absolute;left:1.4em;pointer-events:none;border:1.6px solid #62676a}
+.password-row:before{width:15px;height:12px;border-radius:3px;top:49%}
+.password-row:after{width:8px;height:8px;left:calc(1.4em + 3.5px);top:calc(49% - 8px);border-radius:6px 6px 0 0;border-bottom:0}
+.password-row button{position:absolute;right:5px;top:4px;bottom:4px;border:0;background:transparent;font-size:0;width:44px}
+.password-row button:before{content:"";display:inline-block;width:16px;height:11px;border:1.5px solid #777d80;border-radius:70% 15%;transform:rotate(45deg)}
+.password-row button:after{content:"";position:absolute;left:20px;top:calc(50% - 2px);width:5px;height:5px;border-radius:50%;background:#777d80}
+.primary{width:100%;border:0;border-radius:8px;background:var(--orange);color:white;margin-top:20px;font-weight:650}
+.primary:hover{background:#b84511}.primary:disabled{opacity:.65}
+.recovery{margin-top:18px}.recovery summary{text-align:center;font-size:14px;color:#535852;list-style:none}
+.recovery summary::-webkit-details-marker{display:none}.recovery p{padding:12px 14px;border-radius:8px;background:#f7f6f3}
+.error{color:#a82c20;font-size:14px}.error:empty{display:none}
+.page-foot{height:5vh;border-top:1px solid #d7d2cb;margin:0 1.6vw}
+@media(max-width:720px){
+ .mast{height:52px;padding-inline:6%}.login-shell{display:flex;flex-direction:column}
+ .intro{height:clamp(130px,22vh,190px)}.login-panel{flex:1;align-items:flex-start;padding:32px 7%}
+ .form-wrap{max-width:440px}h2,.role-tabs{margin-bottom:24px}.page-foot{height:16px}
+}

@@ -17,8 +17,9 @@ def entries(manager,query='',offset=0,limit=50):
  def add(kind,r,changes=(),description=''):
   id=r.get('drawing');cat=manager.catmap.get(id,{})
   events.append({'type':kind,'drawing':id,'code':cat.get('code') or r.get('code',''),'title':cat.get('title') or r.get('title',''),'handle':r.get('handle',''),'time':r.get('time') or r.get('finishedAt') or r.get('createdAt',''),'actor':r.get('actor','管理员（历史记录）'),'changes':changes,'description':description})
- for r in read_json(base/'data/attribute-drafts.json',{}).get('history',[]):
-  add(r['type'],r,r['changes'])
+ for file in (base/'data').glob('attribute-drafts*.json'):
+  for r in read_json(file,{}).get('history',[]):
+   add(r['type'],r,r['changes'])
  for r in read_json(base/'data/attribute-edits.json',{}).get('history',[]):
   changes=r.get('changes');note=''
   if changes is None:
@@ -45,4 +46,4 @@ def entries(manager,query='',offset=0,limit=50):
  events.sort(key=lambda e:e['time'],reverse=True)
  if query:
   q=query.casefold();events=[e for e in events if q in ' '.join(str(e.get(k,'')) for k in ('code','title','handle','type','description','changes','actor')).casefold()]
- return {'total':len(events),'records':events[offset:offset+limit]}
+ return {'total':len(events),'records':events[offset:] if limit is None else events[offset:offset+limit]}

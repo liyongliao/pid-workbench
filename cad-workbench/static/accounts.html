@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>账号中心 · 图纸工作台</title><link rel="stylesheet" href="/workspace-ui.css"><link rel="stylesheet" href="/accounts.css"><script defer src="/product-header.js"></script></head>
+<body><product-header section="accounts"></product-header>
+<main><h1>账号中心</h1><section class="account-card"><div class="card-head"><div><h2 id="identity">当前账号</h2><p id="access">正在读取登录身份…</p></div><button id="logout" class="ui-button" disabled>退出登录</button></div></section>
+<section id="editors" class="account-card" hidden><div class="card-head"><div><h2>编辑账号</h2><p>按专业分配编辑权限。</p></div><button id="add" class="primary">新增账号</button></div><div id="users"></div></section>
+<section id="passwordCard" class="account-card" hidden><div class="card-head"><div><h2>访问密码</h2><p>管理员密码与普通用户的共享密码。</p></div><button id="change" class="ui-button">修改密码</button></div></section><p id="notice" role="status"></p></main>
+<dialog id="editorDialog" aria-labelledby="editorTitle"><form id="editorForm"><h2 id="editorTitle">新增账号</h2>
+<label>登录账号<input name="login" required maxlength="64" autocomplete="off"></label><label>姓名<input name="name" required maxlength="64" autocomplete="off"></label>
+<label>新密码<input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></label>
+<fieldset><legend>专业授权</legend><label><input type="checkbox" name="team" value="工艺">工艺</label><label><input type="checkbox" name="team" value="动力">动力</label><label><input type="checkbox" name="team" value="机械">机械</label><label><input type="checkbox" name="team" value="电气">电气</label></fieldset>
+<label class="inline"><input type="checkbox" name="enabled" checked>启用账号</label><p class="error" role="alert"></p><div class="actions"><button type="button" data-close class="ui-button">取消</button><button class="primary">保存</button></div></form></dialog>
+<dialog id="passwordDialog" aria-labelledby="passwordTitle"><form id="passwordForm"><h2 id="passwordTitle">修改访问密码</h2><p>填写要更新的密码。保存后，所有账号需要重新登录。</p>
+<label>当前管理员密码<input required name="currentPassword" type="password" maxlength="128" autocomplete="current-password"></label>
+<label>新管理员密码<input name="adminPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password"></label><label>确认新管理员密码<input name="adminConfirm" type="password" maxlength="128" autocomplete="new-password"></label>
+<label>新普通用户密码<input name="viewerPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password"></label><label>确认新普通用户密码<input name="viewerConfirm" type="password" maxlength="128" autocomplete="new-password"></label>
+<p class="error" role="alert"></p><div class="actions"><button type="button" data-close class="ui-button">取消</button><button class="primary">保存并重新登录</button></div></form></dialog>
+<script type="module" src="/accounts-ui.js"></script></body></html>

@@ -24,7 +24,7 @@ class Service:
   if data is not None:h['Content-Type']='application/octet-stream' if raw else 'application/json'
   h.update(headers or {});conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=30)
   conn.request(method,path,data if raw else json.dumps(data).encode() if data is not None else None,h)
-  r=conn.getresponse();status=r.status;body=r.read();headers=dict(r.getheaders());conn.close()
+  r=conn.getresponse();status=r.status;body=r.read();headers=r.headers;conn.close()
   try:body=json.loads(body)
   except (ValueError,UnicodeDecodeError):pass
   return status,body,headers

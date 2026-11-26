@@ -5,7 +5,13 @@ from management import read_json,write_json,stamp
 from change_log import attributes,diff
 BASE=Path(__file__).resolve().parent
 
-def drafts(base):return read_json(base/'data/attribute-drafts.json',{'counter':0,'blocks':{}})
+import contextvars
+draft_owner=contextvars.ContextVar('draft_owner',default='')
+def draft_name():
+ import hashlib
+ owner=draft_owner.get()
+ return 'attribute-drafts-'+hashlib.sha256(owner.encode()).hexdigest()+'.json' if owner else 'attribute-drafts.json'
+def drafts(base):return read_json(base/'data'/draft_name(),{'counter':0,'blocks':{}})
 def key(drawing,handle):return drawing+'|'+handle
 
 def overlay_info(manager,info):
@@ -25,7 +31,7 @@ def summary(manager):
 def save(manager,data):
  from attribute_editor import normalize
  with manager.lock:
-  if active(manager.base):raise ValueError('正在统一保存，完成后可继续编辑；已有草稿已保留')
+  if not getattr(manager,'vault',None) and active(manager.base):raise ValueError('正在统一保存，完成后可继续编辑；已有草稿已保留')
   info,rows=normalize(manager,data);store=drafts(manager.base);store['counter']+=1
   record={'drawing':info['drawing'],'handle':info['handle'],'baseRevision':info['revision'],'revision':store['counter'],'attributes':rows,'updatedAt':stamp()}
   k=key(info['drawing'],info['handle']);old=store['blocks'].get(k,{})
@@ -37,19 +43,19 @@ def save(manager,data):
    else:baseline=attributes(info['attributes'])
   record['baseline']=baseline
   store.setdefault('history',[]).append(dict(type='暂存块属性',drawing=info['drawing'],handle=info['handle'],time=stamp(),actor=data.get('_actor','管理员'),changes=diff(attributes(info['attributes']),attributes(rows))))
-  store['blocks'][k]=record;write_json(manager.base/'data/attribute-drafts.json',store)
+  store['blocks'][k]=record;write_json(manager.base/'data'/draft_name(),store)
   return {'status':'draft','message':'修改已暂存；点击“统一保存”后生成 CAD 图纸','draftRevision':record['revision'],'summary':summary(manager)}
 
 def discard(manager,data):
  with manager.lock:
-  if active(manager.base):raise ValueError('统一保存期间不能撤销草稿')
+  if not getattr(manager,'vault',None) and active(manager.base):raise ValueError('统一保存期间不能撤销草稿')
   store=drafts(manager.base);k=key(str(data.get('drawing','')),str(data.get('handle','')));record=store['blocks'].get(k)
   if not record or record['revision']!=data.get('draftRevision'):raise ValueError('草稿已变更，请刷新后重试')
   from attribute_editor import block_info
   baseline=record.get('baseline')
   if baseline is None:baseline=attributes(block_info(manager,record['drawing'],record['handle'],include_draft=False)['attributes'])
   store.setdefault('history',[]).append(dict(type='撤销暂存',drawing=record['drawing'],handle=record['handle'],time=stamp(),actor=data.get('_actor','管理员'),changes=diff(attributes(record['attributes']),baseline)))
-  del store['blocks'][k];store['counter']+=1;write_json(manager.base/'data/attribute-drafts.json',store);return summary(manager)
+  del store['blocks'][k];store['counter']+=1;write_json(manager.base/'data'/draft_name(),store);return summary(manager)
 
 def submit(manager,data):
  from attribute_editor import state
@@ -59,7 +65,7 @@ def submit(manager,data):
   if not pending['blocks']:raise ValueError('没有待保存的修改')
   if data.get('counter')!=pending['counter']:raise ValueError('草稿列表已变化，请刷新待保存清单后重试')
   runtime=converter_status()
-  if not runtime['available']:raise ValueError(runtime['message']+' 草稿已保留。')
+  if not getattr(manager,'vault',None) and not runtime['available']:raise ValueError(runtime['message']+' 草稿已保留。')
   st=state(manager.base)
   for r in pending['blocks'].values():
    if st['revisions'].get(r['drawing'],0)!=r['baseRevision']:raise ValueError('图纸版本已变化，请重新核对草稿：'+r['drawing'])
@@ -73,7 +79,12 @@ def submit(manager,data):
     child={'id':jid,'batch':bid,'kind':'attributes','drawing':drawing,'code':r['code'],'title':r['title'],'handle':blocks[0]['handle'],'blocks':blocks,'revision':blocks[0]['baseRevision'],'createdAt':stamp(),'status':'queued','message':'等待统一保存'}
     write_json(manager.base/'data/attribute-jobs'/f'{jid}.json',child);children.append(jid)
    job={'id':bid,'actor':data.get('_actor','管理员'),'children':children,'status':'queued','createdAt':stamp(),'drawings':len(grouped),'blocks':len(pending['blocks']),'counter':pending['counter'],'message':'准备合并修改并统一生成 DWG'}
-   write_json(folder/'job.json',job);threading.Thread(target=run,args=(manager,bid),daemon=True).start();return job
+   job['owner']=draft_owner.get()
+   write_json(folder/'job.json',job)
+   if getattr(manager,'vault',None):
+    manager.vault.enqueue('batch',job,grouped);manager.import_lock.release()
+   else:threading.Thread(target=run,args=(manager,bid),daemon=True).start()
+   return job
   except:manager.import_lock.release();raise
 
 def restore(base,folder):
@@ -109,7 +120,7 @@ def run(manager,bid):
   if p.returncode:raise RuntimeError(read_json(folder/'failure.json',{}).get('error','生成或校验失败，正式图纸未替换，草稿已保留'))
   job=read_json(path)
   with manager.lock:
-   snapshot={name:read_json(base/'data'/name,{} if name in ('attribute-edits.json','attribute-drafts.json') else []) for name in ('manifest.json','catalog.json','attribute-edits.json','attribute-drafts.json')}
+   snapshot={name:read_json(base/'data'/name,{} if name in ('attribute-edits.json','attribute-drafts.json') else []) for name in ('manifest.json','catalog.json','attribute-edits.json',draft_name())}
    write_json(folder/'previous-indexes.json',snapshot)
    for r in manager.catalog:
     dst=folder/'previous-metadata'/f"{r['id']}.json";dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(base/'output'/r['id']/'drawing.json',dst)
@@ -126,7 +137,7 @@ def run(manager,bid):
       st['blocks'].setdefault(id,{})[handle]=after;st['history'].append({'job':jid,'batch':bid,'drawing':id,'handle':handle,'before':before,'after':after,'actor':job.get('actor','管理员'),'changes':diff(block['baseline'],attributes(block['attributes'])) if 'baseline' in block else None,'time':stamp()})
       k=key(id,handle)
       if pending['blocks'].get(k,{}).get('revision')==block['revision']:pending['blocks'].pop(k)
-    for name,content in [('manifest.json',manifests),('catalog.json',catalogs),('attribute-edits.json',st),('attribute-drafts.json',pending)]:write_json(base/'data'/name,content)
+    for name,content in [('manifest.json',manifests),('catalog.json',catalogs),('attribute-edits.json',st),(draft_name(),pending)]:write_json(base/'data'/name,content)
     import references
     previous=references.BASE;references.BASE=base
     try:references.rebuild()

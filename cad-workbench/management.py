@@ -14,32 +14,40 @@ def stamp():return datetime.datetime.now().astimezone().isoformat(timespec='seco
 def signature(drawing,handle,code):return drawing+'|'+handle+'|'+code
 
 class Manager:
- def __init__(self,base=BASE):
+ def __init__(self,base=BASE,recovery=True):
   from workspace import initialize
   initialize(base)
   self.base=Path(base);self.lock=threading.RLock();self.import_lock=threading.Lock();self.token=secrets.token_urlsafe(32)
   self.override_path=self.base/'data/manual-links.json'
-  from attribute_drafts import recover
-  recover(self.base)
-  for p in (self.base/'data/upload-jobs').glob('*.json'):
-   j=read_json(p)
-   if j.get('status') not in ('complete','failed'):
-    j.update(status='failed',message='服务重启中断了导入，请重新上传。原文件已保留。');write_json(p,j)
-  for p in (self.base/'data/attribute-jobs').glob('*.json'):
-   j=read_json(p)
-   if j.get('status') not in ('complete','failed'):
-    folder=self.base/'data/attribute-revisions'/j['id'];backup=folder/'previous-output';live=self.base/'output'/j['drawing']
-    if j.get('status')=='publishing' and backup.exists():
-     if live.exists():os.replace(live,folder/'interrupted-output')
-     os.replace(backup,live)
-     for name,content in read_json(folder/'previous-indexes.json',{}).items():write_json(self.base/'data'/name,content)
-    j.update(status='failed',message='服务重启中断了属性保存，请重新提交；上次正式图纸已保留。');write_json(p,j)
+  if recovery:
+   from attribute_drafts import recover
+   recover(self.base)
+   for p in (self.base/'data/upload-jobs').glob('*.json'):
+    j=read_json(p)
+    if j.get('status') not in ('complete','failed'):
+     j.update(status='failed',message='服务重启中断了导入，请重新上传。原文件已保留。');write_json(p,j)
+   for p in (self.base/'data/attribute-jobs').glob('*.json'):
+    j=read_json(p)
+    if j.get('status') not in ('complete','failed'):
+     folder=self.base/'data/attribute-revisions'/j['id'];backup=folder/'previous-output';live=self.base/'output'/j['drawing']
+     if j.get('status')=='publishing' and backup.exists():
+      if live.exists():os.replace(live,folder/'interrupted-output')
+      os.replace(backup,live)
+      for name,content in read_json(folder/'previous-indexes.json',{}).items():write_json(self.base/'data'/name,content)
+     j.update(status='failed',message='服务重启中断了属性保存，请重新提交；上次正式图纸已保留。');write_json(p,j)
   self.reload()
- def reload(self):
+ def reload(self,pending_links=None):
+  self.validators=read_json(self.base/'data/validators.json',{})
   self.manifest={r['id']:r for r in read_json(self.base/'data/manifest.json',[])}
   self.base_catalog=read_json(self.base/'data/catalog.json',[])
-  self.overrides=read_json(self.override_path,{'revision':0,'links':{},'history':[]})
+  self.overrides=pending_links if pending_links is not None else self.vault.overrides() if getattr(self,'vault',None) else read_json(self.override_path,{'revision':0,'links':{},'history':[]})
   self.catalog=copy.deepcopy(self.base_catalog);self.catmap={r['id']:r for r in self.catalog}
+  revisions=read_json(self.base/'data/attribute-edits.json',{}).get('revisions',{})
+  for d in self.catalog:
+   d['revision']=revisions.get(d['id'],0)
+   d['team']=self.manifest[d['id']].get('team','工艺')
+   for ref in d.get('references',[]):
+    if len(ref['targets'])>1:ref['preferredTarget']=None
   for sid,patch in self.overrides['links'].items():
    d=self.catmap.get(patch['drawing'])
    if not d:continue
@@ -47,11 +55,13 @@ class Manager:
    if ref is None:
     ref={k:patch[k] for k in ('handle','code','key','xy','context')};d['references'].append(ref)
    valid=[t for t in patch['targets'] if t in self.catmap and t!=d['id']]
-   ref.update(targets=valid,preferredTarget=patch['preferredTarget'] if patch['preferredTarget'] in valid else next(iter(valid),None),alternatives=[t for t in valid if t!=patch['preferredTarget']],selfReference=False,resolution='手动关联' if valid else '手动标记为未关联',manual=True,note=patch.get('note',''))
+   ref.update(targets=valid,preferredTarget=patch['preferredTarget'] if patch['preferredTarget'] in valid else (valid[0] if len(valid)==1 else None),alternatives=[t for t in valid if t!=patch['preferredTarget']],selfReference=False,resolution='手动关联' if valid else '手动标记为未关联',manual=True,note=patch.get('note',''))
   # Calculated once per committed library refresh, never per reader.
   def digest(value):return hashlib.sha256(json.dumps(value,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
   self.ref_versions={r['id']:digest(r['references']) for r in self.catalog}
   self.library_version=digest([self.catalog,self.overrides['revision'],[(r['id'],r.get('workingDxf')) for r in self.manifest.values()]])
+  from search_index import SearchIndex
+  self.search_index=SearchIndex(self.catalog)
   self.report=self.missing_report()
   self.export_report()
  def drawing(self,id):return read_json(self.base/'output'/id/'drawing.json')
@@ -107,10 +117,11 @@ class Manager:
    doc=self.drawing(id);item=next((i for i in doc['items'] if i['handle']==handle),None)
    if not item:raise ValueError('来源图元不存在，请先在图纸中选择位置')
    kk=keys(code)
+   if not kk and code and len(code)<=120 and code.isprintable():kk=[code]
    if not kk:raise ValueError('请填写完整关联图号，例如 CEPD-PR-1510')
    targets=data.get('targets',[])
    if not isinstance(targets,list) or len(targets)!=len(set(targets)) or any(t not in self.catmap or t==id for t in targets):raise ValueError('关联目标必须为目录中的其他图纸，且不能重复')
-   preferred=data.get('preferredTarget') or next(iter(targets),None)
+   preferred=data.get('preferredTarget') or (targets[0] if len(targets)==1 else None)
    if preferred is not None and preferred not in targets:raise ValueError('默认跳转图纸必须包含在关联目标中')
    ref=next((r for r in self.catmap[id]['references'] if r['handle']==handle and r['code']==code),None)
    xy=ref['xy'] if ref else data.get('xy',item['xy'])
@@ -121,19 +132,34 @@ class Manager:
    from change_log import link_value
    auto=next((r for d in self.base_catalog if d['id']==id for r in d['references'] if r['handle']==handle and r['code']==code),None)
    self.overrides['revision']+=1;self.overrides['history'].append({'time':stamp(),'key':key,'actor':data.get('_actor','管理员'),'from':link_value(ref),'to':link_value(self.overrides['links'].get(key) or auto),'before':before,'after':self.overrides['links'].get(key)})
-   write_json(self.override_path,self.overrides);self.reload();return {'revision':self.overrides['revision'],'missingUnique':self.report['missingUnique']}
+   if getattr(self,'vault',None):
+    with self.vault.transaction() as db:
+     self.vault.index_links(db,self.base_catalog,self.overrides)
+     self.vault.sync_audit(db,self)
+    # The active SQLite transaction is owned by the HTTP request.
+    pending=self.overrides
+    self.reload(pending)
+   else:
+    write_json(self.override_path,self.overrides);self.reload()
+   return {'revision':self.overrides['revision'],'missingUnique':self.report['missingUnique']}
  def upload(self,stream,length,meta):
   filename=str(meta.get('filename',''))
   if Path(filename).name!=filename or '/' in filename or '\\' in filename or not filename.lower().endswith('.dwg') or len(filename.encode('utf-8'))>240 or any(ord(c)<32 for c in filename):raise ValueError('请上传 .dwg 文件，文件名不能包含路径或控制字符，且不能过长')
   code=str(meta.get('code','')).strip().upper();kk=keys(code);title=str(meta.get('title','')).strip();platform=str(meta.get('platform','')).strip().upper()
+  from vault import TEAMS
+  team=meta.get('team','工艺')
+  if team not in TEAMS:raise ValueError('请选择所属专业')
+  from disciplines import check_number
+  check_number(team,code)
+  if team!='工艺' and code and all(ch.isprintable() for ch in code):kk=[code]
   if not kk or len(code)>120:raise ValueError('请填写有效的完整图号')
-  if platform!=kk[0].split('-')[0]:raise ValueError('所属平台应与图号一致')
+  if not platform or len(platform)>80 or (team=='工艺' and platform!=kk[0].split('-')[0]):raise ValueError('所属平台应与图号一致')
   if not title or len(title)>140:raise ValueError('请填写图纸中文名称（最多 140 字）')
   if length<6 or length>64*1024*1024:raise ValueError('单张 DWG 文件大小应在 6 字节至 64 MB 之间')
   from cad_runtime import converter_status,drawing_font
   status=converter_status()
-  if not status['available']:raise ValueError(status['message'])
-  drawing_font()
+  if not getattr(self,'vault',None) and not status['available']:raise ValueError(status['message'])
+  if not getattr(self,'vault',None):drawing_font()
   if not self.import_lock.acquire(blocking=False):raise ValueError('已有图纸正在导入，请等待完成后再上传')
   id='u'+uuid.uuid4().hex[:12];folder=self.base/'uploads'/id;folder.mkdir(parents=True);path=folder/filename
   try:
@@ -145,11 +171,17 @@ class Manager:
      f.write(chunk);digest.update(chunk);remaining-=len(chunk)
    with path.open('rb') as f:header=f.read(6)
    if not re.fullmatch(rb'AC10[0-9]{2}',header):raise ValueError('文件不是有效的 DWG，不能仅修改扩展名后上传')
-   existing=next((r for r in self.manifest.values() if r['sha256']==digest.hexdigest()),None)
+   existing=next((r for r in self.manifest.values() if r['sha256']==digest.hexdigest() and r.get('team','工艺')==team),None)
    if existing:raise ValueError('此 DWG 已在目录中：'+existing['code']+'。请直接编辑关联。')
-   job={'id':id,'actor':meta.get('_actor','管理员'),'filename':filename,'code':code,'title':title,'platform':platform,'sha256':digest.hexdigest(),'source':str(path.relative_to(self.base.parent)),'createdAt':stamp(),'status':'queued','message':'已接收，准备转换 CAD'}
+   job={'id':id,'actor':meta.get('_actor','管理员'),'filename':filename,'team':team,'code':code,'title':title,'platform':platform,'sha256':digest.hexdigest(),'source':str(path.relative_to(self.base.parent)),'createdAt':stamp(),'status':'queued','message':'已接收，准备转换 CAD'}
+   if getattr(self,'vault',None):
+    from vault import archive
+    archive(self.vault.root,path,job['sha256']);job['archived']=True;path.unlink()
    write_json(self.base/'data/upload-jobs'/f'{id}.json',job)
-   threading.Thread(target=self.run_import,args=(id,),daemon=True).start();return job
+   if getattr(self,'vault',None):
+    self.vault.enqueue('upload',dict(job,drawing=id),[id]);self.import_lock.release()
+   else:threading.Thread(target=self.run_import,args=(id,),daemon=True).start()
+   return job
   except:
    path.unlink(missing_ok=True);folder.rmdir();self.import_lock.release();raise
  def run_import(self,id):

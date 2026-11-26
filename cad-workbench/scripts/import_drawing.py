@@ -9,14 +9,15 @@ def progress(message):
  job.update(status='processing',message=message);write_json(jobpath,job)
 from cad_runtime import convert
 progress('正在读取 DWG 原始图元')
-source=base.parent/job['source'];dxfdir=base/'data/source-dxf/uploads'/id
-convert(source.parent,dxfdir,'DXF','*.dwg')
+from vault import original
+source=original(base,job);dxfdir=base/'data/source-dxf/uploads'/id
+convert(source.parent,dxfdir,'DXF',source.name)
 dxf=next(iter(dxfdir.glob('*.dxf')),None)
 if not dxf:raise RuntimeError('DWG 未生成可读取的 DXF')
 import ezdxf
 source_doc=ezdxf.readfile(dxf)
 if not len(source_doc.modelspace()):raise ValueError('DWG 模型空间为空，当前查看器需要模型空间图纸')
-r={'id':id,'filename':job['filename'],'code':job['code'],'platform':job['platform'],'source':job['source'],'dxf':str(dxf.relative_to(base)),'sha256':job['sha256'],'entityCounts':dict(collections.Counter(e.dxftype() for e in source_doc.modelspace()))}
+r={'id':id,'filename':job['filename'],'archived':job.get('archived',False),'team':job.get('team','工艺'),'code':job['code'],'platform':job['platform'],'source':job['source'],'dxf':str(dxf.relative_to(base)),'sha256':job['sha256'],'entityCounts':dict(collections.Counter(e.dxftype() for e in source_doc.modelspace()))}
 progress('正在生成矢量图纸与设备索引')
 import build,refresh,preserve_cad
 build.BASE=base;build.ROOT=base.parent;refresh.BASE=base;refresh.ROOT=base.parent
@@ -36,7 +37,12 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tests'))
 import verify_cad
 verify_cad.BASE=base;check=verify_cad.work(r)
 if check['errors']:raise RuntimeError('CAD 完整性校验失败：'+'；'.join(check['errors']))
-assert hashlib.sha256(source.read_bytes()).hexdigest()==r['sha256']
+if hashlib.sha256(source.read_bytes()).hexdigest()!=r['sha256']:raise ValueError('DWG 原件校验失败')
+import os
+if os.environ.get('PID_VAULT'):
+ from vault import archive
+ archive(Path(os.environ['PID_VAULT']),source,r['sha256'])
+ r['archived']=True
 write_json(base/'uploads'/id/'verification.json',check)
 write_json(base/'uploads'/id/'result.json',{'manifest':r,'catalog':c})
 progress('CAD 校验通过，正在更新目录与跨图关联')

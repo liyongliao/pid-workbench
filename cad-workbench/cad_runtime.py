@@ -23,6 +23,7 @@ def converter_status():
   if system=='Darwin':candidates.append(BASE/'tools/ODAFileConverter.app/Contents/MacOS/ODAFileConverter')
   found=shutil.which('ODAFileConverter')
   if found:candidates.append(Path(found))
+ if override=='/opt/workbench/oda-headless' and not os.access('/engine/ODAFileConverter',os.X_OK):candidates=[]
  path=next((p.resolve() for p in candidates if p.is_file() and (system=='Windows' or os.access(p,os.X_OK)) and native_compatible(p,system,arch)),None)
  bundled=bool(path and path.is_relative_to(BASE/'tools'))
  return {'available':bool(path),'bundled':bundled,'platform':system,'architecture':arch,'path':str(path) if path else None,'name':'内置 DWG 引擎' if bundled else '已配置 DWG 引擎' if path else '未配置 DWG 引擎','message':'统一保存时批量生成并校验 DWG' if path else '当前环境可浏览图纸和暂存修改；生成 DWG 需要此平台的转换运行包。'}
@@ -40,3 +41,20 @@ def drawing_font():
  font=next((p for p in candidates if p.is_file()),None)
  if font is None:raise ValueError('未找到中文字体，请保留 tools/fonts 随系统迁移，或设置 PID_CAD_FONT')
  return str(font)
+
+
+def probe():
+    """Round trip a known line through the configured engine; no project input."""
+    import tempfile
+    import ezdxf
+    with tempfile.TemporaryDirectory(prefix="cad-probe-") as temp:
+        folder=Path(temp)
+        doc=ezdxf.new("R2018")
+        line=doc.modelspace().add_line((2,3),(5,7))
+        doc.saveas(folder/"probe.dxf")
+        convert(folder,folder/"dwg","DWG","probe.dxf")
+        convert(folder/"dwg",folder/"back","DXF","probe.dwg")
+        actual=ezdxf.readfile(folder/"back/probe.dxf").entitydb.get(line.dxf.handle)
+        if actual is None or actual.dxftype()!="LINE" or tuple(actual.dxf.end)!=(5,7,0):
+            raise ValueError("测试图元回读不一致")
+    return "DWG 生成及回读通过"

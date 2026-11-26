@@ -25,7 +25,7 @@ def source_platform(r):
 def rebuild():
  records=json.loads((BASE/'data/manifest.json').read_text(encoding='utf-8'));catalog=json.loads((BASE/'data/catalog.json').read_text(encoding='utf-8'));cats={r['id']:r for r in catalog};docs={};aliases=collections.defaultdict(set);evidence=[];canonical={};file_keys=collections.defaultdict(set)
  for r in records:
-  r['platform']=source_platform(r);cats[r['id']]['platform']=r['platform'];d=json.loads((BASE/'output'/r['id']/'drawing.json').read_text(encoding='utf-8'));d['platform']=r['platform'];docs[r['id']]=d;canonical[r['id']]=keys(r['code'])[0]
+  r['platform']=source_platform(r) if r.get('team','工艺')=='工艺' else r['platform'];cats[r['id']]['platform']=r['platform'];d=json.loads((BASE/'output'/r['id']/'drawing.json').read_text(encoding='utf-8'));d['platform']=r['platform'];docs[r['id']]=d;canonical[r['id']]=(keys(r['code']) or [r['code']])[0]
   aliases[canonical[r['id']]].add(r['id']);file_keys[canonical[r['id']]].add(r['id'])
  def add(key,id,method,t):
   if key.split('-')[0]!=docs[id]['platform']:return
@@ -63,20 +63,25 @@ def rebuild():
  def rank(id):
   r=cats[id];src=r['source'];revision=re.search(r'REV\s*(\d+)',src,re.I);sheet=re.search(r'\((\d+)\)$',canonical[id]);stage=0 if 'MD(DD)-' in src else 1 if 'MD-DWG-' in src else 2
   return (int(sheet[1]) if sheet else 0,stage,-int(revision[1]) if revision else 0,id)
+ generic={prepare(r['code']):canonical[r['id']] for r in records if r.get('team','工艺')!='工艺'}
+ generic_pattern=re.compile(r'(?<![A-Z0-9])(?:'+'|'.join(map(re.escape,sorted(generic,key=len,reverse=True)))+r')(?![A-Z0-9])') if generic else None
  unresolved=[];counts=collections.Counter()
  for id,d in docs.items():
   refs=[];seen=set()
   for t in d['texts']:
-   for code in codes(t['text']):
+   found=codes(t['text'])
+   if generic_pattern:found.extend(generic_pattern.findall(prepare(t['text'])))
+   for code in found:
     signature=(t['handle'],code)
     if signature in seen:continue
-    seen.add(signature);kk=keys(code);candidates=set();methods=[]
+    seen.add(signature);kk=keys(code) or [generic[code]];candidates=set();methods=[]
     for k in kk:
      got,method=lookup(k);candidates|=got;methods.append(method)
     is_self=id in candidates
     targets=sorted(candidates-{id},key=rank)
+    if is_self and len(candidates)>1 and canonical[id] in kk:targets=[]
     # The current drawing's title number / old number is not a cross-drawing link.
-    ref={'handle':t['handle'],'code':code,'key':kk[0],'context':t['zh'],'xy':t['xy'],'targets':targets,'preferredTarget':targets[0] if targets else None,'selfReference':is_self,'resolution':'本图图号' if is_self else '；'.join(dict.fromkeys(methods)),'alternatives':targets[1:]}
+    ref={'handle':t['handle'],'code':code,'key':kk[0],'context':t['zh'],'xy':t['xy'],'targets':targets,'preferredTarget':targets[0] if len(targets)==1 else None,'selfReference':is_self,'resolution':'本图图号' if is_self else '；'.join(dict.fromkeys(methods)),'alternatives':targets[1:]}
     refs.append(ref)
     if not is_self:
      if targets:counts['resolved']+=1
@@ -86,6 +91,6 @@ def rebuild():
  (BASE/'data/manifest.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),encoding='utf-8')
  (BASE/'data/catalog.json').write_text(json.dumps(catalog,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
  (BASE/'data/link-evidence.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
- report={'sourceFiles':len(records),'unindexedFiles':[str(p.relative_to(BASE.parent)) for p in BASE.parent.rglob('*.dwg') if not p.is_relative_to(BASE) and str(p.relative_to(BASE.parent)) not in {r['source'] for r in records}],'resolvedOccurrences':counts['resolved'],'missingOccurrences':counts['missing'],'missingUnique':len({r['key'] for r in unresolved}),'unresolved':unresolved,'aliases':{k:sorted(v,key=rank) for k,v in sorted(aliases.items())},'evidenceCount':len(evidence)}
+ report={'sourceFiles':len(records),'unindexedFiles':[str(p.relative_to(BASE.parent)) for p in ([] if any(r.get('archived') for r in records) else BASE.parent.rglob('*.dwg')) if not p.is_relative_to(BASE) and str(p.relative_to(BASE.parent)) not in {r['source'] for r in records}],'resolvedOccurrences':counts['resolved'],'missingOccurrences':counts['missing'],'missingUnique':len({r['key'] for r in unresolved}),'unresolved':unresolved,'aliases':{k:sorted(v,key=rank) for k,v in sorted(aliases.items())},'evidenceCount':len(evidence)}
  (BASE/'data/reference-audit.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print({k:v for k,v in report.items() if k not in ('aliases','unresolved')})
 if __name__=='__main__':rebuild()

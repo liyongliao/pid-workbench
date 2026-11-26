@@ -1,0 +1,9 @@
+*{box-sizing:border-box}body{margin:0;background:#f8f7f4}main{width:min(740px,calc(100% - 32px));margin:clamp(28px,6vh,64px) auto}h1{font-size:32px;letter-spacing:-.04em;margin:0 0 24px}h2{font-size:17px;margin:0}p{font-size:14px;color:#646764;line-height:1.6}
+.account-card{background:#fff;border:1px solid var(--ui-line);border-radius:13px;margin:14px 0;overflow:hidden}
+.card-head,.user-row{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;gap:12px}
+.card-head p,.user-row p{margin:4px 0 0}.user-row{border-top:1px solid var(--ui-line);font-size:14px}.user-row strong{overflow-wrap:anywhere}.user-row p{font-size:12px}
+button{font:inherit;cursor:pointer;white-space:nowrap}button.primary{border:0;border-radius:7px;padding:8px 13px;background:var(--ui-accent);color:white;font-size:13px}
+#users>.empty{padding:0 20px 16px;margin:0}.error{color:#ad3926}.error:empty{display:none}
+dialog{width:min(420px,92vw);max-height:88dvh;overflow:auto;border:1px solid var(--ui-line);border-radius:14px;padding:22px;color:inherit}dialog::backdrop{background:#25272250}
+form>label{display:block;margin-top:13px;font-size:13px}form label input:not([type=checkbox]){display:block;margin-top:5px;width:100%;padding:9px 10px;border:1px solid var(--ui-line);border-radius:7px;font:inherit}input:read-only{background:#f6f5f2}input[type=checkbox]{accent-color:var(--ui-accent)}
+fieldset{margin:15px 0 0;border:1px solid var(--ui-line);border-radius:7px;font-size:13px}fieldset label{display:inline-flex;align-items:center;margin:4px}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}[hidden]{display:none!important}

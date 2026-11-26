@@ -224,5 +224,6 @@ def verify_prepared(base,jid,roundtrip):
  for e in before.entitydb.values():
   if e.dxftype()=='ATTRIB' and e.dxf.handle not in changed['changed']:
    a=reread.entitydb.get(e.dxf.handle);assert a is not None and a.dxf.text==e.dxf.text,'其他块属性被修改'
- source_hash=hashlib.sha256((base.parent/r['source']).read_bytes()).hexdigest();assert source_hash==r['sha256'],'原始 DWG 已变化'
+ from vault import original,sha
+ if sha(original(base,r))!=r['sha256']:raise ValueError('原始 DWG 已变化')
  write_json(folder/'verification.json',{'passed':True,'geometryUnchanged':True,'otherAttributesUnchanged':True,'originalDWGHashUnchanged':True,'attributeCount':sum(len(b['attributes']) for b in blocks),'changed':changed})

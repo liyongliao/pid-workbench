@@ -7,7 +7,7 @@ from workspace import CODE_ROOT,VERSION,data_root,initialize,instance_id
 from access_control import AccessControl,AccessError,local_client,cookie_header
 BASE=initialize(data_root());ROOT=BASE.parent
 access=AccessControl(BASE)
-manager=Manager(BASE)
+manager=Manager(BASE,recovery=not bool(os.environ.get('PID_VAULT')))
 logic=json.loads((BASE/'data/logic.json').read_text(encoding='utf-8')) if (BASE/'data/logic.json').exists() else {}
 def norm(s):return re.sub(r'[^A-Z0-9\u4e00-\u9fff]','',s.upper())
 def shorttag(s):return re.sub(r'^(CEPD?|WHP[A-Z]|WP[A-Z]|PRP)-','',s.upper())
@@ -20,9 +20,9 @@ class Handler(BaseHTTPRequestHandler):
   if getattr(self,'defer_send',False):
    self.pending_response=(data,code,ctype,filename,headers);return
   if not isinstance(data,bytes):data=json.dumps(data,ensure_ascii=False).encode()
-  if headers and 'ETag' in headers and len(data)>1024 and re.search(r'(?:^|,)\s*gzip\s*(?:,|$)',self.headers.get('Accept-Encoding',''),re.I):
+  if headers and 'ETag' in headers and 'Content-Encoding' not in headers and len(data)>1024 and re.search(r'(?:^|,)\s*gzip\s*(?:,|$)',self.headers.get('Accept-Encoding',''),re.I):
    data=gzip.compress(data,compresslevel=3,mtime=0);headers['Content-Encoding']='gzip'
-  self.send_response(code);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(data)));self.send_header('Cache-Control',(headers or {}).get('Cache-Control','no-store'));self.send_header('X-Frame-Options','DENY');self.send_header('Referrer-Policy','same-origin');self.send_header('X-Content-Type-Options','nosniff')
+  self.send_response(code);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(data)));self.send_header('Cache-Control',(headers or {}).get('Cache-Control','no-store'));self.send_header('X-Frame-Options','SAMEORIGIN' if self.path.split('?')[0]=='/nwd.html' else 'DENY');self.send_header('Referrer-Policy','same-origin');self.send_header('X-Content-Type-Options','nosniff')
   if self.command=='POST' and code>=400:
    self.close_connection=True;self.send_header('Connection','close')
   if filename:self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+urllib.parse.quote(filename))
@@ -59,7 +59,7 @@ class Handler(BaseHTTPRequestHandler):
    public={entry.strip() for entry in os.environ.get('PID_PUBLIC_ORIGINS','').split(',') if entry.strip()}
    origins={'http://'+value for value in allowed_hosts}|public
    if not any(urllib.parse.urlsplit(o).netloc==host for o in origins) or (origin and (origin not in origins or urllib.parse.urlsplit(origin).netloc!=host)):
-    self.send({'error':'管理请求校验失败，请刷新页面后重试'},403);return
+    self.send({'error':'访问地址未通过校验。请使用管理员提供的工作台网址。'},403);return
    u=urllib.parse.urlparse(self.path)
    if u.path.startswith('/api/auth/'):
     self.auth_post(u.path);return
@@ -67,33 +67,55 @@ class Handler(BaseHTTPRequestHandler):
    if self.headers.get('X-Management-Token')!=manager.token:
     self.send({'error':'管理请求校验失败，请刷新页面后重试'},403);return
    length=int(self.headers.get('Content-Length','0'))
+   if u.path=='/api/admin/nwd-import' and getattr(manager,'vault',None):
+    if self.session.get('role')!='admin' or not self.session.get('login'):
+     raise AccessError('仅管理员可导入模型',403)
+    from model_imports import receive
+    name=urllib.parse.parse_qs(u.query).get('name',[''])[0]
+    self.send(receive(manager.vault.root,self.rfile,length,name),202);return
    if u.path=='/api/admin/upload':
     self.connection.settimeout(120)
-    meta={k:v[0] for k,v in urllib.parse.parse_qs(u.query).items()};meta['_actor']='管理员 · '+self.client_address[0];self.send(manager.upload(self.rfile,length,meta),202);return
+    meta={k:v[0] for k,v in urllib.parse.parse_qs(u.query).items()};meta['_actor']='管理员 · '+self.client_address[0]
+    if getattr(manager,'vault',None):
+     from production import mutation
+     mutation(self,u.path,meta)
+    self.send(manager.upload(self.rfile,length,meta),202);return
    if length<2 or length>1024*1024:raise ValueError('请求内容大小无效')
    data=json.loads(self.rfile.read(length))
    if not isinstance(data,dict):raise ValueError('请求必须为对象')
    data['_actor']='管理员 · '+self.client_address[0]
+   if getattr(manager,'vault',None):
+    from production import mutation
+    result=mutation(self,u.path,data)
+    if result is not None:self.send(result);return
    if u.path=='/api/admin/link':self.send(manager.edit_link(data));return
    if u.path=='/api/admin/attributes':
     from attribute_drafts import save
-    self.send(save(manager,data));return
+    result=save(manager,data)
+    self.audit_draft()
+    self.send(result);return
    if u.path=='/api/admin/attributes/publish':
     from attribute_drafts import submit
     self.send(submit(manager,data),202);return
    if u.path=='/api/admin/attributes/discard':
     from attribute_drafts import discard
-    self.send(discard(manager,data));return
+    result=discard(manager,data)
+    self.audit_draft()
+    self.send(result);return
    self.send({'error':'未知管理操作'},404)
+  except AccessError as ex:self.send({'error':str(ex)},ex.status)
   except (ValueError,TypeError,KeyError) as ex:self.send({'error':str(ex)},400)
   except (BrokenPipeError,ConnectionResetError):pass
   except Exception as ex:self.send({'error':str(ex)},500)
+ def audit_draft(self):
+  if getattr(manager,"vault",None):
+   with manager.vault.transaction() as db:manager.vault.sync_audit(db,manager)
  def authorize(self,admin=False):
   p=urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
   self.session=access.session(self.headers.get('Cookie'))
-  if not admin and p in ('/login','/login.css','/login.js','/api/auth/session','/api/health'):return True
+  if not admin and p in ('/login','/login.css','/login.js','/login-art.webp','/api/auth/session','/api/health'):return True
   if not self.session:
-   if self.command=='GET' and p in ('/','/index.html'):
+   if self.command=='GET' and p in ('/','/index.html','/nwd.html','/twin.html','/accounts.html'):
     self.send(b'',302,headers={'Location':'/login?next='+urllib.parse.quote(self.path,safe='')})
    else:self.send({'error':'请先登录','loginRequired':True},401)
    return False
@@ -109,9 +131,19 @@ class Handler(BaseHTTPRequestHandler):
    if not isinstance(data,dict):raise AccessError('请求必须为对象')
    ip=self.client_address[0];session=access.session(self.headers.get('Cookie'))
    if path=='/api/auth/setup':
-    token=access.setup(data,ip);self.send({'role':'admin'},headers={'Set-Cookie':cookie_header(token)});return
+    if getattr(manager,'vault',None):
+     from accounts import identity,session_identity
+     login=identity(data.get('login'))
+    token=access.setup(data,ip)
+    if getattr(manager,'vault',None):
+     token=session_identity(access,manager.vault,dict(role='admin',login=login,password=data['adminPassword']),ip,access.session(cookie_header(token)))
+    self.send({'role':'admin'},headers={'Set-Cookie':cookie_header(token)});return
    if path=='/api/auth/login':
-    token=access.login(data,ip,session);self.send({'role':data['role']},headers={'Set-Cookie':cookie_header(token)});return
+    if getattr(manager,'vault',None):
+     from accounts import session_identity
+     token=session_identity(access,manager.vault,data,ip,session)
+    else:token=access.login(data,ip,session)
+    self.send({'role':data['role']},headers={'Set-Cookie':cookie_header(token)});return
    if not session:raise AccessError('请先登录',401)
    if self.headers.get('X-CSRF-Token')!=session['csrf']:raise AccessError('请求校验失败，请刷新后重试',403)
    if path=='/api/auth/logout':
@@ -126,8 +158,13 @@ class Handler(BaseHTTPRequestHandler):
   u=urllib.parse.urlparse(self.path);p=urllib.parse.unquote(u.path);q=urllib.parse.parse_qs(u.query)
   if p=='/api/auth/session':
    self.send({'configured':bool(access.config),'canSetup':not access.config and local_client(self.client_address[0]),'authenticated':bool(self.session),**({'role':self.session['role'],'csrf':self.session['csrf']} if self.session else {})});return
+  if p=='/project-settings.js' and not (CODE_ROOT/'static/project-settings.js').is_file():
+   self.send(b'globalThis.PidProject = {};',ctype='text/javascript');return
   if p=='/login':
-   self.send((CODE_ROOT/'static/login.html').read_bytes(),ctype='text/html; charset=utf-8');return
+   page=(CODE_ROOT/'static/login.html').read_bytes()
+   if (CODE_ROOT/'static/login-art.webp').is_file():
+    page=page.replace(b'class="intro"',b'class="intro has-art"',1)
+   self.send(page,ctype='text/html; charset=utf-8');return
   if p=='/api/admin/system':
    from diagnostics import snapshot
    self.send(snapshot(manager));return
@@ -136,7 +173,8 @@ class Handler(BaseHTTPRequestHandler):
    from change_log import entries
    try:offset=max(0,int(q.get('offset',['0'])[0]))
    except ValueError:offset=0
-   self.send(entries(manager,q.get('q',[''])[0],offset));return
+   query=q.get('q',[''])[0]
+   self.send(manager.vault.history(query,offset) if getattr(manager,'vault',None) else entries(manager,query,offset));return
   if p=='/api/admin/state':self.send(manager.state());return
   if p=='/api/admin/attributes':
    from attribute_editor import block_info
@@ -156,42 +194,38 @@ class Handler(BaseHTTPRequestHandler):
   if p=='/api/catalog':
    self.cached(('catalog',manager.library_version),lambda:[{k:v for k,v in r.items() if k!='search'} for r in catalog],'application/json; charset=utf-8');return
   if p=='/api/search':
-   term=q.get('q',[''])[0].strip();platform=q.get('platform',[''])[0];needle=norm(term);out=[];eq=[]
-   for r in catalog:
-    if platform and r['platform']!=platform:continue
-    score=100 if needle and needle in norm(r.get('search','')) else fuzz.partial_ratio(needle,norm(r['title']+' '+r['code'])) if needle else 100
-    titlehit=needle and needle in norm(r['title']+' '+r['code'])
-    first=len(eq)
-    if score>=65:out.append({'id':r['id'],'score':score+ (30 if titlehit else 0),'title':r['title'],'code':r['code'],'platform':r['platform'],'entityCount':r.get('entityCount',0)})
-    if needle:
-     for e in r.get('equipment',[]):
-      if needle in norm(e['tag']+' '+e['name']+' '+e.get('search','')):eq.append(dict(e,drawingId=r['id'],drawingTitle=r['title'],platform=r['platform']))
-    if len(eq)>first:
-     rank=200+max(30 if norm(e['tag'])==needle or norm(shorttag(e['tag']))==needle else 10 if needle in norm(e['tag']) else 0 for e in eq[first:])
-     if score>=65:out[-1]['score']=max(rank,out[-1]['score'])
-     else:out.append(dict(id=r['id'],score=rank,title=r['title'],code=r['code'],platform=r['platform'],entityCount=r.get('entityCount',0)))
-   eq.sort(key=lambda e:(0 if norm(e['tag'])==needle else 1 if norm(shorttag(e['tag']))==needle else 2 if needle in norm(e['tag']) else 3,e['tag'],e['drawingId']))
-   self.send({'drawings':sorted(out,key=lambda x:-x['score'])[:100],'equipment':eq[:100],'total':len(out),'equipmentTotal':len(eq)});return
+   self.send(manager.search_index.search(q.get('q',[''])[0][:256],q.get('platform',[''])[0],q.get('team',[''])[0]));return
   if p.startswith('/api/drawing/'):
    id=p.split('/')[-1]
    if id not in manifest:self.send({'error':'未找到图纸'},404);return
    path=BASE/'output'/id/'drawing.json';st=path.stat()
+   digest=manager.validators.get(id+'/drawing.json')
+   vault=os.environ.get('PID_VAULT')
+   centerlines=Path(vault)/'cache/cad-centerlines-v1'/(digest+'.json') if vault and digest else None
+   has_centerlines=bool(centerlines and centerlines.is_file())
+   sheet_model=None
+   if getattr(manager,'vault',None):
+    from sheet_ai import published
+    sheet_model=published(manager.vault,id,digest)
    def drawing():
-    data=json.loads(path.read_bytes());data['references']=catmap[id]['references'];return data
-   self.cached((id,st.st_mtime_ns,st.st_ctime_ns,st.st_size,manager.ref_versions[id]),drawing,'application/json; charset=utf-8');return
+    data=json.loads(path.read_bytes())
+    if has_centerlines and 'centerlines' not in data:data['centerlines']=json.loads(centerlines.read_bytes())
+    data['sheetModel']=sheet_model;data['drawingDigest']=digest
+    data['references']=catmap[id]['references'];data['team']=catmap[id]['team'];data['revision']=catmap[id]['revision'];data['assets']={mode:manager.validators.get(id+'/'+mode+'.svg') for mode in ('original','chinese')};return data
+   self.cached((id,sheet_model and sheet_model["id"],has_centerlines,manager.validators.get(id+'/drawing.json',(st.st_mtime_ns,st.st_ctime_ns,st.st_size)),manager.ref_versions[id],catmap[id]['revision'],manager.validators.get(id+'/chinese.svg'),manager.validators.get(id+'/original.svg')),drawing,'application/json; charset=utf-8');return
   if p=='/api/logic':self.send(logic);return
   if p=='/api/quality':
    quality=json.loads((BASE/'data/quality.json').read_text(encoding='utf-8'));quality['missingReferences']=[dict(r,drawing=d['id']) for d in catalog for r in d['references'] if not r.get('targets') and not r.get('selfReference')]
    quality['review']=[dict(t,drawing=d['id'],code=d['code']) for d in catalog for t in manager.drawing(d['id'])['translations'] if t['review']]
    self.send(quality);return
   if p=='/api/related':
-   tag=q.get('tag',[''])[0];platform=q.get('platform',[''])[0];target=norm(shorttag(tag));matches=[]
+   tag=q.get('tag',[''])[0];platform=q.get('platform',[''])[0];target=norm(shorttag(tag));matches=[];team=q.get('team',['工艺'])[0]
    for r in catalog:
-    if r['platform']!=platform:continue
+    if r['platform']!=platform or r.get('team','工艺')!=team:continue
     for e in r.get('equipment',[]):
      if norm(shorttag(e['tag']))==target:matches.append(dict(e,drawingId=r['id'],drawingTitle=r['title'],code=r['code']))
-   causes=[c for c in logic.get('causes',[]) if c['platform']==platform and (norm(shorttag(c['tag']))==target or any(norm(shorttag(t))==target for t in re.findall(r'(?:[A-Z]+-)?[A-Z]{1,6}-?\d+[A-Z]?',c['original'])))]
-   effects=[e for e in logic.get('effects',[]) if norm(shorttag(e['tag']))==target] if platform=='CEPD' else []
+   causes=[c for c in logic.get('causes',[]) if team=='工艺' and c['platform']==platform and (norm(shorttag(c['tag']))==target or any(norm(shorttag(t))==target for t in re.findall(r'(?:[A-Z]+-)?[A-Z]{1,6}-?\d+[A-Z]?',c['original'])))]
+   effects=[e for e in logic.get('effects',[]) if norm(shorttag(e['tag']))==target] if platform=='CEPD' and team=='工艺' else []
    self.send({'drawings':matches,'causes':causes,'effects':effects});return
   if p.startswith('/download/'):
    parts=p.split('/')
@@ -199,9 +233,9 @@ class Handler(BaseHTTPRequestHandler):
    _,_,id,kind=parts
    if id not in manifest:self.send({'error':'未找到图纸'},404);return
    name=manifest[id]['filename'];folder=BASE/'output'/id
-   if kind=='original':f=(ROOT/manifest[id]['source']).resolve()
    if kind=='original':
-    if not f.is_relative_to(ROOT):self.send({'error':'源文件路径无效'},404);return
+    from vault import original
+    f=original(BASE,manifest[id])
    elif kind=='dwg':f=folder/'中文图纸.dwg';name=Path(name).stem+'-中文.dwg'
    elif kind=='dxf':f=folder/'中文图纸.dxf';name=Path(name).stem+'-中文.dxf'
    elif kind=='pdf':
@@ -217,11 +251,13 @@ class Handler(BaseHTTPRequestHandler):
    f=(BASE/p.lstrip('/')).resolve()
    if not f.is_relative_to(BASE/'output') or f.suffix!='.svg':self.send({'error':'无此文件'},404);return
   else:
-   f=(CODE_ROOT/'static'/('index.html' if p=='/' else p.lstrip('/'))).resolve()
+   f=(CODE_ROOT/'static'/('index.html' if p=='/' else 'nwd.html' if p=='/twin.html' else p.lstrip('/'))).resolve()
    if not f.is_relative_to(CODE_ROOT/'static'):self.send({'error':'无此页面'},404);return
   if not f.is_file():self.send({'error':'无此页面'},404);return
   if p.startswith('/output/'):
-   st=f.stat();self.cached((p,st.st_mtime_ns,st.st_ctime_ns,st.st_size),f.read_bytes,'image/svg+xml');return
+   st=f.stat();self.cached((p,manager.validators.get(p.removeprefix('/output/'),(st.st_mtime_ns,st.st_ctime_ns,st.st_size))),f.read_bytes,'image/svg+xml');return
+  if f.suffix in ('.js','.css') or f.parent==CODE_ROOT/'static/appearance':
+   self.cached((p,f.stat().st_mtime_ns,f.stat().st_size),f.read_bytes,mimetypes.guess_type(f.name)[0] or 'application/octet-stream');return
   self.send(f.read_bytes(),ctype=mimetypes.guess_type(f.name)[0] or 'application/octet-stream')
 if __name__=='__main__':
  port=int(os.environ.get('PID_PORT','8765'));host=os.environ.get('PID_HOST','0.0.0.0');print(f'PID 图纸工作台：监听 {host}:{port}，本机访问 http://127.0.0.1:{port}',flush=True);ThreadingHTTPServer((host,port),Handler).serve_forever()

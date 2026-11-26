@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from cad_runtime import drawing_font
+from centerlines import extract as extract_centerlines
 """DWG-derived CAD build. Never reads a source PDF and never invokes OCR."""
 from pathlib import Path
 import json,re,math,time,hashlib,logging,sys,copy,concurrent.futures,collections,traceback
@@ -145,7 +146,8 @@ def build(r):
    if st.dxf.name in originalfonts:st.dxf.font,st.dxf.bigfont=originalfonts[st.dxf.name]
   d.styles.get('中文标注').dxf.font=Path(drawing_font()).name
   d.saveas(folder/'中文图纸.dxf')
-  payload={'id':r['id'],'title':title(r),'code':r['code'],'platform':r['platform'],'source':r['source'],'extents':ext,'viewBox':[float(x) for x in viewbox.split()],'items':items,'equipment':equip,'references':refs,'texts':texts,'translations':ledger,'entityCounts':r['entityCounts'],'audit':{'errors':len(audit.errors),'fixes':len(audit.fixes),'unavailable':getattr(audit,'unavailable',None)},'xref':[b.name for b in d.blocks if b.block.dxf.flags&4]}
+  centerlines=extract_centerlines(d,lambda p:tuple(matrix.transform(p))[:2],max(1.e-8,(ext[2]-ext[0])*1.e-5))
+  payload={'centerlines':centerlines,'id':r['id'],'title':title(r),'code':r['code'],'platform':r['platform'],'source':r['source'],'extents':ext,'viewBox':[float(x) for x in viewbox.split()],'items':items,'equipment':equip,'references':refs,'texts':texts,'translations':ledger,'entityCounts':r['entityCounts'],'audit':{'errors':len(audit.errors),'fixes':len(audit.fixes),'unavailable':getattr(audit,'unavailable',None)},'xref':[b.name for b in d.blocks if b.block.dxf.flags&4]}
   from attribute_metadata import decorate,search_extra
   decorate(payload,BASE,r,d,previous);ledger=payload['translations'];equip=payload['equipment']
   (folder/'drawing.json').write_text(json.dumps(payload,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
