@@ -1,3 +1,4 @@
+import {cachedAsset,initAssetCache} from './asset-cache.js';
 import {NwdRenderer} from './nwd-render.js';
 import {openPlatform} from './platform-scene.js';
 import {createTour} from './tour.js';
@@ -26,7 +27,7 @@ function node(tag,text,cls){const el=document.createElement(tag);if(text!=null)e
 function button(label,fn,cls,tip){const b=node('button',label,cls);b.type='button';if(tip)b.title=tip;b.onclick=fn;return b}
 function notify(message,stay=false){clearTimeout(noticeTimer);$('status').textContent=message;$('status').hidden=false;if(!stay)noticeTimer=setTimeout(()=>$('status').hidden=true,3200)}
 async function request(url,options){
- const r=await fetch(url,options);
+ const r=await (url.includes('/api/nwd/asset?')?cachedAsset(url,options):fetch(url,options));
  if(r.status===401){location.replace('/login?next='+encodeURIComponent(location.pathname+location.search));throw Error('请先登录')}
  if(!r.ok){const e=await r.json().catch(()=>({}));throw Error(e.error||'读取失败（'+r.status+'）')}return r
 }
@@ -437,6 +438,7 @@ async function init(){
  $('model').onchange=()=>{if(dirty&&!confirm('离开将丢弃未发布修改，继续切换？')){$('model').value=model;return}dirty=false;location.assign((twinMode?'/twin.html':'/nwd.html')+'?model='+encodeURIComponent($('model').value))};
  if(!['k','l'].includes(model))document.querySelector('.platform-id small').textContent='工程模型数字孪生';
  $('source').textContent=info.source;document.title=info.name+' · NWD 模型审查';
+ await initAssetCache(session);
  const [meta,published]=await Promise.all([getJSON(endpoint('index')),getJSON(endpoint('scene')+'&rev='+encodeURIComponent(rev))]);index=meta;revision=published.revision;
  scene={hidden:[],removed:[],views:[],notes:[],...published.scene};baseline=JSON.stringify(scene);
  const native=!['k','l'].includes(model)?null:await fetch('/api/platforms/'+encodeURIComponent(model)+'/index.json').then(r=>r.ok?r.json():null).catch(()=>null);
@@ -507,7 +509,7 @@ async function init(){
    if(old&&old!==next){old.separate(0);old.inactive=true;old.ready=false;old.clearMeasurement();measurement=null;measureStart=null}
    viewer=next;viewer.inactive=false;twinMode=twin;next.canvas.classList.remove('staging');showChrome(twin);
    if(pose){viewer.platformEnvironment?.(environment);viewer.setCamera(pose);$('preset').value=environment}
-   if(!old&&viewer.native&&!pose)presets.get('overview')?.apply();
+   // openPlatform has already selected its initial preset; do not reset after loading.
    if(twin&&!tour){tour=createTour(viewer,presets,index.views.filter((_,i)=>!scene.removedViews?.includes(i)),model,[index.digest,session.login||session.role].join('.'),notify,info.name)}
    viewer.ready=true;update();viewer.queueDetail();setMode('orbit');dock();
    floating=!twin&&!embed&&innerWidth>=1120;
@@ -560,7 +562,7 @@ async function init(){
    remoteRemoved=[];remoteRevision=0;dirty=false;
    scene={hidden:[],removed:[],views:[],notes:[],...fresh.scene};baseline=JSON.stringify(scene);revision=fresh.revision;isolate=-1;edits=[];redos=[];
    environment=scene.environment||'overview';
-   if(scene.camera&&!tour?.playing)applyCamera(scene)
+   // Publishing metadata must not move a visitor's active camera.
    update();renderPanel()
   }catch{ /* A temporarily offline viewer keeps its current version. */ }finally{checking=false}
  }

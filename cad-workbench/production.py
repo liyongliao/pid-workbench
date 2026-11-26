@@ -27,6 +27,7 @@ os.environ["PID_DATA_ROOT"]=str(store.view(generation))
 import server
 
 server.access=AccessControl(store.root)
+if not server.access.config:server.access.setup_code()
 server.manager.vault=store
 server.manager.reload()
 guard=threading.RLock()
@@ -84,7 +85,11 @@ class Request(server.Handler):
         return super().authorize(admin)
 
     def get(self):
+        if not self.feature_access():return
         path=self.path.split("?")[0]
+        if path in ('/api/models','/api/nwd/models','/api/platforms'):
+            from site_config import read
+            if read(store.root)['features']['models']=='off':return self.send([])
         if path.startswith("/project-legends/"):
             assets={"catalog.json":"application/json", "old.pdf":"application/pdf", "new.pdf":"application/pdf",
                     "manual.pdf":"application/pdf", "valves.png":"image/png"}
@@ -138,7 +143,7 @@ class Request(server.Handler):
                 return self.send([dict(r,drawings=json.loads(r["drawings"])) for r in db.execute("SELECT * FROM releases ORDER BY rowid DESC LIMIT 100")])
         if path=="/api/auth/session":
             s=self.session or {}
-            return self.send(dict(configured=bool(server.access.config),canSetup=not server.access.config and server.local_client(self.client_address[0]),authenticated=bool(s),named=True,**{k:s[k] for k in ("role","csrf","login","name","teams") if k in s}))
+            return self.send(dict(configured=bool(server.access.config),canSetup=not server.access.config,setupTokenRequired=not server.local_client(self.client_address[0]),authenticated=bool(s),named=True,**{k:s[k] for k in ("role","csrf","login","name","teams") if k in s}))
         if path=="/api/health":
             return self.send(dict(name="cad-workbench",version=server.VERSION,instance=server.instance_id(store.root),drawings=len(server.manager.catalog),generation=generation))
         if path=="/api/admin/state":

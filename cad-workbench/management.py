@@ -146,14 +146,14 @@ class Manager:
   filename=str(meta.get('filename',''))
   if Path(filename).name!=filename or '/' in filename or '\\' in filename or not filename.lower().endswith('.dwg') or len(filename.encode('utf-8'))>240 or any(ord(c)<32 for c in filename):raise ValueError('请上传 .dwg 文件，文件名不能包含路径或控制字符，且不能过长')
   code=str(meta.get('code','')).strip().upper();kk=keys(code);title=str(meta.get('title','')).strip();platform=str(meta.get('platform','')).strip().upper()
-  from vault import TEAMS
+  from site_config import team_names
   team=meta.get('team','工艺')
-  if team not in TEAMS:raise ValueError('请选择所属专业')
+  if team not in team_names(self.vault.root if getattr(self,'vault',None) else self.base):raise ValueError('请选择所属专业')
   from disciplines import check_number
   check_number(team,code)
-  if team!='工艺' and code and all(ch.isprintable() for ch in code):kk=[code]
-  if not kk or len(code)>120:raise ValueError('请填写有效的完整图号')
-  if not platform or len(platform)>80 or (team=='工艺' and platform!=kk[0].split('-')[0]):raise ValueError('所属平台应与图号一致')
+  if code and all(ch.isprintable() for ch in code):kk=[code]
+  if not code or not code.isprintable() or len(code)>120:raise ValueError('请填写有效的完整图号')
+  if not platform or not platform.isprintable() or len(platform)>80:raise ValueError('请填写所属区域或平台（最多 80 字）')
   if not title or len(title)>140:raise ValueError('请填写图纸中文名称（最多 140 字）')
   if length<6 or length>64*1024*1024:raise ValueError('单张 DWG 文件大小应在 6 字节至 64 MB 之间')
   from cad_runtime import converter_status,drawing_font

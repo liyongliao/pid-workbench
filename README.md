@@ -1,64 +1,175 @@
-# 多专业工程图纸工作台
+# 工程图纸与模型工作台
 
-工艺、动力、机械、电气图纸共同查看，编辑按个人账号及专业授权。图号、平台、专业及修订均独立。设备位号优先检索，原中图切换保持视口，多目标引用供用户选择。PDF 是导出格式。
+一个面向工程资料管理的自托管网页系统。把 CAD 图纸、设备位号、专业权限和三维模型集中在同一个工作台，使用者通过浏览器查图、检索、查看关联和维护资料，无需安装 CAD 软件。
 
-Mac 安装版双击“启动图纸工作台.command”；旧版迁入后的管理员首次登录以现有密码登记姓名，随后在右上角“编辑账号与专业授权”管理人员。原生网页入口 production.py，独立转换进程 worker.py。两个进程使用同一个 PID_VAULT。Mac 的 desktop.py 管理本机双进程。Windows 旧版查看入口作为兼容路径保留，3.0 的受控发布目标是 Mac 和 Linux。
+支持按项目设置系统名称和专业，可用于不同工程或单位。源码仓库不包含任何现场图纸、模型、账号、密码、专用装配配置或商业 DWG 转换器。
 
-源码、运行环境、资料盘和备份分别维护。原始 DWG 按 SHA-256 只读保存；浏览读已发布 SVG 和索引。SQLite 记录账号、专业、任务和生效修订。批量发布先生成并回读校验 DWG，再整体切换。后台中断后继续处理队列，网页服务独立重启。初次迁移、备份恢复和 Linux 离线部署见 [Linux 部署说明](docker/README.md)。
+## 可以做什么
 
-专业字段由资料盘根目录的 profiles.json 配置。未配置时工艺沿用已验证规则；其他专业提供 CAD 块属性与通用 TAG，只在有代表性 DWG 并回读验证后启用现场映射。例如：
-```json
-{"机械":{"codePattern":"[A-Z0-9-]+","tagFields":["TAG"],"searchFields":["TAG","DESCRIPTION"],"attributeLabels":{"TAG":"设备位号","DESCRIPTION":"说明"}}}
-```
-规则在新导入或重新生成时生效，不改写原图。工程资料、密码文件及转换器不进入源码仓库。
+- 首次访问通过五步网页向导创建管理员、设置名称、配置专业、导入资料并确认功能。
+- 上传 DWG，生成浏览视图、设备索引和跨图关联，原件独立保存。支持逐张批量导入。
+- 图纸查看、位号搜索、专业筛选、收藏与打印；已访问图纸在页面内按版本缓存。
+- 为编辑账号分配专业权限，修改块属性并发布修订，保留修改记录。
+- 导入支持的 NWD 或 GLB，浏览模型、保存审查视图和批注。模型分块支持浏览器缓存。
+- 没有对应资料时不开放相关功能；系统设置中也可手动关闭。三维示意默认关闭。
 
-## 源码与现场文件
+工艺、动力、机械、电气为内置专业，可新增仪表、土建等专业。高级 CAD 字段规则仍可放在资料盘的 `profiles.json`。因果逻辑沿用项目已有的数据导入流程，尚不支持任意格式因果表的一键识别。
 
-源码仓库包含应用、导入及审查工具、测试与部署模板。运行现场版本时单独配置资料盘、转换器和字体。精细装配、工程建模依据、标定数据和平台专用视角从本机安装的项目配置读取。没有项目配置时，联动视口按图纸生成示意模型，平台模型按自身边界显示全景。现场装配模块属于项目资料。移机请同时备份本机项目配置与资料盘。
+## 部署前准备
 
-## 现场复验
+推荐 **Linux x86-64 / NAS + Docker Engine 与 Compose v2**。程序分两个容器：
 
-在已安装依赖及引擎的 Mac 或 Linux 上，用同一个 Python 环境运行 `python tests/accept_vault.py 资料盘 图纸内部ID 可编辑块句柄`。可通过 `--work-dir` 指定有足够空间的本地临时目录。工具备份并恢复到临时副本，使用临时账户演练 15 人热缓存查询、重复提交、进程中断、事务中断、两人编辑冲突及回滚。现场负载、存储类型和图纸复杂度会影响结果。启动前配置 PID_DWG_CONVERTER 和 PID_CAD_FONT。
+| 容器 | 职责 |
+| --- | --- |
+| `workbench` | 网页、登录、查询、配置和任务提交 |
+| `worker` | DWG 转换与回读校验、模型后台处理 |
 
-## 三维联动
+两个容器共享同一个资料盘；“后台在线”不代表 DWG 引擎已配置。
 
-打开或切换图纸时，三维视口按当前 P&ID 的管段、阀门、设备和仪表自动组装。点选任一侧可查同一 CAD 图元，双击模型或使用“聚焦所选”查看零件细节。模型高度和尺寸用于读图。资料盘的 `models/blocks` 保存离线零件目录与按内容校验的几何文件。复制到另一台工作台即可复用。缺少相应零件时使用内置构件。
+准备可写的本地磁盘目录，避免将 SQLite 工作库放在 SMB/NFS。首次构建需要联网下载基础镜像和依赖。Linux ARM64 当前采用 amd64 镜像，需宿主支持模拟运行，速度与兼容性需自行验证。
 
-如需查看完整平台，可在三维视口的来源菜单主动选择平台参考，再使用“局部精查”读取附近构件。
+**DWG 导入需要单独安装经授权的 Linux x64 ODA File Converter。** 挂载的是完整运行目录，内含可执行的 `ODAFileConverter`、Qt 库及插件，不能只复制一个可执行文件。程序镜像提供中文字体与启动器。没有转换器也能完成网页初始化、查看已入库资料，DWG 导入暂不可用。
 
-平台模型在资料盘 models 目录。导入工具 scripts/import_platform_model.py 接受已转换且带 sourceId 的完整 GLB 分块目录、资料盘、平台标识 k/l 和对应原始 NWD。导入后重载网页即可看到模型；源工程文件及生成的模型索引均独立于代码。K / L 的高精展示资源使用项目已有的工程转换成果。
+## 方式一：Linux 引导安装
 
-对 CEPK 或 WHPL 图纸，系统按所属平台和唯一精确位号关联。来源模型只有支路内阀门序号时，可在管理模式点选该平台图元，在属性栏选择模型构件并确认。一个构件对应多个图元时列出位置供选择。修改记录进入工作台审计。
-
-### NWD 模型审查与网页调用
-
-工作台顶部的 **数字孪生** 可独立浏览 K / L 完整平台，切换甲板、下层及全模型视角。在同页导航选择 **NWD 模型审查** 即可进入当前平台的审查工作区。视图栏列出原始 NWD 中提取的审查相机。模型浏览器按源文件、组及构件展开，可以搜索、独立显示子层、隔离、恢复已移除节点。用管理员账号发布当前图层、相机、剖切、项目视图与批注。多人同时编辑时，过期版本会提示冲突。
-
-同一工作台下的页面可以嵌入最新版。调用者沿用现有登录会话。
-
-```html
-<iframe src="/nwd.html?model=l&amp;embed=1"
-        title="L 平台发布模型" width="100%" height="600" allowfullscreen></iframe>
-```
-
-管理员从「数字孪生 → NWD 模型审查 → 更多 → 导入模型」选择 NWD 或静态 GLB。转换在工作台本机执行。导入完成后选「打开模型」。相同源文件复用已有模型和版本；上传进度在刷新后仍可查看。两种模式共用模型编号、构件树和发布版本。「模型浏览器 → 移除 → 更多 → 发布版本」会在最新总览中同步移除对应子树。「已移除 → 恢复」后再次发布即可恢复。
-
-工作台内置离线 NWD 读取器，可直接处理已支持的 lichunk-008 构件树、几何、实例、材质和保存视图。遇到不支持的文件布局时会保留源件并显示具体原因。Mac 需要扩展转换器时运行 `zsh scripts/install-nwd-macos.sh` 安装 .NET 8 和 NwcIO。也可通过 `PID_NWD_CONVERTER` 指定已安装的 nwcio 可执行文件。新版 worker 镜像构建时包含该转换器。等待扩展转换器的任务会在引擎就绪后继续，静态 GLB 可直接入库。导入保留可解析的几何和构件层级，网页编辑保存为项目版本。原件保存在资料盘的 model-imports 目录。
-
-把 `model` 改为 `k` 可显示 K 平台。分享菜单可复制带 `rev` 的固定版本链接。在数字孪生的 NWD 审查页打开「更多 → 分享模型」可复制供其他项目页面使用的嵌入代码。项目版本存放在资料盘的 SQLite 数据库。源 NWD 保留；移除和隐藏作用于网页发布版本。源预设恢复相机，原 Navisworks 批注、视点专属外观覆盖及碰撞结果尚未导入。两点距离按模型坐标单位显示。
-
-网页使用本地 Three.js 与资料盘中的模型分块。迁移时一并复制模型目录下的 `editor` 子目录。需要从已有项目源文件重建时，运行：
+在已安装 Docker、Compose 和 Python 3 的服务器上执行：
 
 ```sh
-python cad-workbench/scripts/prepare_nwd.py <资料盘/models/l> <platform-l.hierarchy.json> <原始.nwd>
+git clone https://github.com/liyongliao/pid-workbench.git
+cd pid-workbench
+bash scripts/install-linux.sh
 ```
 
-此命令读取已入库且带源节点编号的 GLB 分块、同版源模型树与原始 NWD。全景先加载概览，靠近构件后读取完整细节。设置可切换到可见区域原始精度。
+按提示输入浏览器访问地址，例如 `http://192.168.1.20:8765`。脚本创建新的 `instance` 目录，生成 `.env`、构建两个镜像并启动服务。若 Docker 需要管理员权限，可用 `sudo bash scripts/install-linux.sh`。
 
-同格式的新工程可用 `--parts <GLB分块目录> --name <显示名称>` 写入独立的 `models/<模型编号>`，重载审查页即可在模型菜单切换。模型编号使用小写字母、数字、连字符或下划线。
+已有转换器时，可以一次传入配置：
 
-### 逐图 Agent 建模与审核
+```sh
+bash scripts/install-linux.sh \
+  --origin 'http://192.168.1.20:8765,https://drawings.example.com' \
+  --engine /opt/ODAFileConverter \
+  --directory /srv/drawing-workbench \
+  --port 8765
+```
 
-在「项目工具 → 管理模式 → 图纸建模」中选择一张图纸，点击「复制本图建模任务」，粘贴到 PID 项目中的 Agent 会话。任务包含图号、源图版本校验值、建模要求以及同版退回意见。Agent 逐图检查原图、完成装配并验证实际渲染，参照已审核样图的细度提交草稿。
+加 `--dry-run` 可只查看生成的配置与命令，不创建目录、不启动服务。脚本拒绝使用非空实例目录，避免把“新建项目”当成“升级项目”。未传 `--engine` 时创建空引擎目录，后续修改实例 `.env` 中的 `PID_ENGINE_DIR` 并重建 worker 即可。
 
-已有草稿可在「对照原图审核」中查看、通过上线或退回。后台已停用 API 自动生成与重试。旧版保存的接口配置仍存在于原资料盘及备份中。
+启动后，在资料盘 `data/setup-token.txt` 读取一次性安装码，打开所配置的网址，按网页完成初始化。请由部署人员把安装码交给项目管理员；管理员创建成功后安装码文件删除。新项目不需要恢复任何旧资料盘。
+
+## 方式二：手动 Docker / NAS Compose 部署
+
+下载或克隆本仓库。创建一个新的空资料盘，准备 `.env`（放在仓库根目录）：
+
+```dotenv
+PID_VAULT_DIR=/srv/drawing-workbench/vault
+PID_ENGINE_DIR=/opt/ODAFileConverter
+PID_BIND_IP=0.0.0.0
+PID_PUBLISHED_PORT=8765
+PID_PUBLIC_ORIGINS=http://192.168.1.20:8765,https://drawings.example.com
+```
+
+```sh
+mkdir -p /srv/drawing-workbench/vault
+sudo chown 1000:1000 /srv/drawing-workbench/vault
+docker compose config --quiet
+docker compose build
+docker compose up -d --wait
+docker compose ps
+```
+
+只给新建资料盘调整权限，不要对已有项目或整个磁盘递归修改权限。没有转换器时可以先创建空目录作为 `PID_ENGINE_DIR`，完成其他设置。NAS 的 Compose 项目界面也可加载本仓库的 `compose.yaml` 与上述环境变量。
+
+已有离线镜像时可先 `docker load -i workbench-linux-amd64.tar.gz`，再执行 `docker compose up -d --no-build`。镜像标签必须与 Compose 的版本一致；GitHub 源码不等于已发布的镜像或离线安装包，本仓库默认从源码构建。
+
+### Lucky / HTTPS 反向代理
+
+`PID_PUBLIC_ORIGINS` 必须包含浏览器真正访问的完整来源，包括协议和非默认端口。例如：
+
+```dotenv
+PID_PUBLIC_ORIGINS=http://192.168.1.20:8765,https://drawings.example.com:8880
+```
+
+代理上游使用已配置的内部主机地址。不要把 `/login` 等路径写入来源，不要使用 `*` 或关闭来源校验。更改 `.env` 后执行 `docker compose up -d --force-recreate workbench`，仅重启旧容器不会更新环境变量。
+
+## 首次使用
+
+1. 用安装码创建管理员，并设置普通查看用户的共享密码。
+2. 设置系统名称、项目名称和欢迎说明。
+3. 选择或新增专业；需要时配置设备位号与搜索属性名。
+4. 导入 DWG 或模型，也可以稍后再导入。DWG 每张最大 64 MB；NWD / GLB 最大 2 GB。
+5. 确认功能状态并进入工作台。管理员之后可从顶部“系统设置”继续维护。
+
+原图、账号、修订及设置都保存在资料盘。导入 NWD 的支持范围取决于文件布局，无法解析时会保留原件并显示原因，不保证所有 Navisworks 特性均可导入。
+
+## 更新、备份与项目精细模型
+
+**更新程序使用完整镜像构建，不要在旧容器内清空 `/opt/workbench` 再覆盖源码。** 旧版本将 DWG 启动器放在程序目录，这种增量更新会误删启动器。3.5.1 起启动器位于 `/usr/local/bin/pid-oda-headless`，独立于程序目录。
+
+更新前做一致性备份，目标必须是独立的新目录；发布任务进行中备份工具会拒绝执行：
+
+```sh
+docker compose run --rm --no-deps \
+  -v /srv/workbench-backups:/backups \
+  workbench python backup.py backup /vault /backups/before-update
+
+git pull --ff-only
+docker compose build
+docker compose up -d --wait
+```
+
+使用引导安装的实例时，上述 Compose 命令要加上同样的 `--project-name` 和 `--env-file /实例目录/.env`，与脚本 dry-run 输出一致。保留旧镜像、配置和备份，回退时使用原版本与对应备份，不能把不同现场修改的资料盘直接互相覆盖。
+
+### 专用精细模型为什么可能不显示
+
+整个平台模型、逐图发布记录与专门编写的装配脚本是不同资料。仅保留 GLB 或几个 `*-assembly.js`，不代表已经完整保留现场精细模型。特别需要保留 `project-settings.js`，它注册图号、视角及装配加载方法。
+
+从 3.5.1 起推荐把项目私有扩展放在资料盘内：
+
+```text
+vault/
+  site/
+    project_assemblies.py          # 可选的项目规则
+    static/
+      project-settings.js         # 项目注册入口
+      test-separator.js           # 示例：现场私有装配模块
+      ...                         # 注册入口依赖的模块
+  models/                         # 模型、构件库与派生资源
+  data/                           # 账号与系统配置
+  revisions/                      # 图纸修订
+  workbench.sqlite3               # 发布记录等
+```
+
+迁移旧项目的扩展时，在有原始项目目录的机器执行：
+
+```sh
+python3 scripts/preserve_site.py /旧项目/cad-workbench /目标资料盘
+```
+
+工具会保留已知项目扩展，缺少注册入口或目标有不同版本时拒绝覆盖。此脚本不复制图纸、模型或数据库，完整迁移仍需资料盘备份。资料盘内 `site`、`models` 和 `legends` 都纳入备份。项目扩展属于可信管理员维护的代码，不应接受普通用户上传的任意脚本，也不应提交到公共仓库。
+
+## 常见问题
+
+| 现象 | 检查方法 |
+| --- | --- |
+| 两个容器在线，仍显示引擎未配置 | 在 worker 内检查 `test -x /usr/local/bin/pid-oda-headless`、`test -x /engine/ODAFileConverter`；检查实际挂载目录及权限。不能只看 `build.txt` 的版本号。 |
+| 引擎和字体存在，自检仍失败 | 查看 `docker compose logs --tail 100 worker` 和运行环境中的自检结果，排查共享库、Qt 插件与转换器平台。 |
+| 精细模型消失 | 检查 `site/static/project-settings.js` 及其依赖模块、图纸同版发布记录、模型构件库。不要用空通用安装包替换资料盘。 |
+| 反代提示访问地址未通过校验 | 检查完整外部来源、端口与协议，保存环境变量后重建网页容器。 |
+| 模型刷新仍需等待 | HTTPS / localhost 下可持久缓存内容分块，但解析和 GPU 上传仍需时间。浏览器空间不足、清理缓存或更换登录会话会重新下载。 |
+
+## Mac 与 Windows
+
+Mac 已有桌面安装继续使用原启动方式，并保留运行环境和资料盘。Mac 的 Docker 模式同样遵循上述配置，但 amd64 模拟运行可能较慢。
+
+Windows 推荐 Docker Desktop 的 **Linux 容器模式**，通过终端或 Compose 界面按“手动 Docker 部署”操作，路径填写 Windows 上 Docker 可访问的绝对路径。使用 Linux 版 DWG 转换器，不能挂载 Windows EXE 作为 Linux 引擎。本次不新增原生 Windows 多进程部署脚本，避免把未验收的运行方式作为正式方案。
+
+## 开发与验证
+
+```sh
+python -m pip install -r cad-workbench/requirements.txt
+python -m unittest discover -s cad-workbench/tests -v
+node --test tests/*.test.js
+python scripts/check_source_only.py
+```
+
+真实 DWG 转换测试需额外配置本机转换器与字体并设置 `PID_TEST_DWG=1`。源码检查限制现场数据与凭据进入仓库。CI 检查通过不等于已经完成某台 NAS 的现场验收。

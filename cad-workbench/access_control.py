@@ -35,6 +35,19 @@ class AccessControl:
    for role in ROLES:
     record=self.config['passwords'][role]
     if len(bytes.fromhex(record['salt']))!=24 or len(bytes.fromhex(record['hash']))!=32 or record['rounds']!=ROUNDS:raise RuntimeError('访问密码配置损坏，请在服务器本机修复')
+ def setup_code(self):
+  """Local installation secret permits first-run setup from a NAS browser."""
+  configured=os.environ.get('PID_SETUP_TOKEN','')
+  if configured:return configured
+  file=self.path.parent/'setup-token.txt'
+  with self.lock:
+   if not file.exists():
+    file.parent.mkdir(parents=True,exist_ok=True)
+    try:
+     fd=os.open(file,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+     with os.fdopen(fd,'w') as stream:stream.write(secrets.token_urlsafe(24))
+    except FileExistsError:pass
+   return file.read_text().strip()
  def write(self,config):
   self.path.parent.mkdir(parents=True,exist_ok=True);temp=self.path.with_suffix('.tmp')
   fd=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
@@ -63,11 +76,18 @@ class AccessControl:
   raise AccessError('身份或密码不正确',401)
  def setup(self,data,ip):
   with self.lock:
-   if not local_client(ip):raise AccessError('首次密码请在服务器本机通过 127.0.0.1 设置',403)
    if self.config:raise AccessError('密码已设置，请登录后修改',409)
+   if not local_client(ip):
+    self.guard_attempt(ip)
+    supplied=data.get('setupToken','')
+    if not isinstance(supplied,str) or not hmac.compare_digest(supplied,self.setup_code()):
+     try:self.fail(ip)
+     except AccessError:raise AccessError('安装码无效，请向部署人员索取一次性安装码',403)
    viewer=data.get('viewerPassword');admin=data.get('adminPassword');validate(viewer);validate(admin)
    if viewer==admin:raise AccessError('管理员与普通用户请设置不同密码')
    self.write({'version':1,'passwords':{r:password_record(p) for r,p in zip(ROLES,(viewer,admin))}})
+   (self.path.parent/'setup-token.txt').unlink(missing_ok=True)
+   self.attempts.pop(ip,None)
    return self.new_session('admin')
  def login(self,data,ip,old_session=None):
   with self.lock:

@@ -1,3 +1,4 @@
+import {cachedAsset} from './asset-cache.js';
 import * as T from 'three';
 import {industrialMaterial} from './industrial-surfaces.js';
 
@@ -53,7 +54,7 @@ export async function openPlatform(view,id,signal,addButton,progress,manifest=nu
  if(view.grid)view.grid.visible=false;view.scene.add(root);view.renderer.localClippingEnabled=true;
  if(skylight&&Math.max(...skylight.size)<=view.renderer.getContext().getParameter(WebGL2RenderingContext.MAX_3D_TEXTURE_SIZE)){
   try{
-   const response=await fetch(url+skylight.asset,{signal:controller.signal});
+   const response=await cachedAsset(url+skylight.asset,{signal:controller.signal});
    if(!response.ok)throw Error('甲板采光数据读取失败');
    const data=await response.arrayBuffer();controller.signal.throwIfAborted();
    if(data.byteLength!==skylight.size.reduce((n,v)=>n*v,1))throw Error('甲板采光数据不完整');
@@ -71,7 +72,7 @@ export async function openPlatform(view,id,signal,addButton,progress,manifest=nu
   return materials.get(key)
  }
  async function get(entry){
-  const res=await fetch(url+entry.asset,{signal:controller.signal});
+  const res=await cachedAsset(url+entry.asset,{signal:controller.signal});
   if(!res.ok)throw Error('平台模型分块读取失败');
   const buffer=await res.arrayBuffer();controller.signal.throwIfAborted();
   if(buffer.byteLength!==entry.bytes)throw Error('平台模型分块不完整');

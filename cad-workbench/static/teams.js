@@ -1,7 +1,7 @@
 const teamNames=['工艺','动力','机械','电气'];
 document.getElementById('teamFilter').onchange=event=>{
  S.team=event.target.value;
- document.querySelector('[data-tab="logic"]').hidden=!!S.team&&S.team!=='工艺';
+ document.querySelector('[data-tab="logic"]').hidden=!S.capabilities?.enabled.logic||!!S.team&&S.team!=='工艺';
  if((S.tab==='drawings'&&S.team&&S.drawing?.team!==S.team)||(S.tab==='logic'&&S.team&&S.team!=='工艺')){
   setTab('equipment');return search();
  }

@@ -68,3 +68,9 @@ body{font-family:var(--ui-font);color:var(--ui-ink)}
 .sheet-print-footer{margin-top:12px;border-top:1px solid #dfdcd6;padding-top:12px}
 .action-dot{color:#141414;font-size:.85em}
 .matrix-source{margin-top:16px}.matrix-source summary{cursor:pointer;color:#525b62}
+
+/* Configurable project names remain readable without displacing navigation. */
+.app-header .brand b,.product-brand strong{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.app-header .project,.product-header .project{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.product-account+.product-account{margin-left:0}.product-account[aria-current=page]{color:var(--ui-accent);border-color:var(--ui-accent);background:#fff6f0}.product-header .project{font-size:13px;color:var(--ui-muted)}

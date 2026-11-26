@@ -28,3 +28,12 @@
 !cad-workbench/static/appearance/*.webp
 !cad-workbench/static/appearance/*.hdr
 !cad-workbench/static/appearance/SOURCES.txt
+cad-workbench/project_assemblies.py
+cad-workbench/scripts/extract_safety_valves.py
+cad-workbench/static/project-settings.js
+cad-workbench/static/test-separator.js
+cad-workbench/static/gas-cooler.js
+cad-workbench/static/process-assembly.js
+cad-workbench/static/deck-drain-assembly.js
+cad-workbench/static/fire-pump-assembly.js
+cad-workbench/static/login-art.webp

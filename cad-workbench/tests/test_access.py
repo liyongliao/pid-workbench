@@ -78,6 +78,8 @@ class ContainerOriginTests(unittest.TestCase):
    login={'role':'viewer','password':service.viewer_password}
    headers={'Host':'nas.example.test:19000','Origin':origin}
    self.assertEqual(service.request('/api/auth/login','POST',login,headers=headers)[0],200)
+   # Trusted external origin with proxy-rewritten internal Host is supported.
+   self.assertEqual(service.request('/api/auth/login','POST',login,headers={'Origin':origin})[0],200)
    self.assertEqual(service.request('/api/auth/login','POST',login,headers=dict(headers,Origin='http://other.example.test'))[0],403)
    self.assertEqual(service.request('/api/auth/login','POST',login,headers=dict(headers,Host='other.example.test'))[0],403)
   finally:service.close()

@@ -22,9 +22,10 @@ class FreshInstallHTTPTests(unittest.TestCase):
  def tearDownClass(cls):cls.service.close()
  def get(self,path):return self.service.request(path,cookie=self.cookie)
  def test_empty_library_endpoints(self):
-  for path in ('/api/catalog','/api/logic','/api/quality','/api/missing-references','/api/search?q=pressure','/api/related?tag=PT-9999','/api/admin/state'):
+  for path in ('/api/catalog','/api/quality','/api/missing-references','/api/search?q=pressure','/api/related?tag=PT-9999','/api/admin/state'):
    with self.subTest(path=path):self.assertEqual(self.get(path)[0],200)
   self.assertEqual(self.get('/api/catalog')[1],[])
+  self.assertEqual(self.get('/api/logic')[0],404)  # No logic module before data is installed.
  def test_static_assets_come_from_source_not_data_directory(self):
   self.assertFalse((self.service.root/'static').exists())
   for path in ('/','/login','/style.css','/app.js','/admin.js','/account.js','/system.js','/login.css','/login.js'):

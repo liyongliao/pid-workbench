@@ -67,3 +67,4 @@ cad-workbench/未提供的关联DWG清单.txt
 *.otf
 *.deb
 *.svg
+/instance/

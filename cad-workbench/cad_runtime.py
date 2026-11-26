@@ -23,10 +23,12 @@ def converter_status():
   if system=='Darwin':candidates.append(BASE/'tools/ODAFileConverter.app/Contents/MacOS/ODAFileConverter')
   found=shutil.which('ODAFileConverter')
   if found:candidates.append(Path(found))
- if override=='/opt/workbench/oda-headless' and not os.access('/engine/ODAFileConverter',os.X_OK):candidates=[]
+ wrapper=override in ('/opt/workbench/oda-headless','/usr/local/bin/pid-oda-headless')
+ if wrapper and not os.access('/engine/ODAFileConverter',os.X_OK):candidates=[]
  path=next((p.resolve() for p in candidates if p.is_file() and (system=='Windows' or os.access(p,os.X_OK)) and native_compatible(p,system,arch)),None)
  bundled=bool(path and path.is_relative_to(BASE/'tools'))
- return {'available':bool(path),'bundled':bundled,'platform':system,'architecture':arch,'path':str(path) if path else None,'name':'内置 DWG 引擎' if bundled else '已配置 DWG 引擎' if path else '未配置 DWG 引擎','message':'统一保存时批量生成并校验 DWG' if path else '当前环境可浏览图纸和暂存修改；生成 DWG 需要此平台的转换运行包。'}
+ reason='DWG 转换启动器缺失，请更新 worker 镜像' if wrapper and not Path(override).is_file() else '转换器未挂载或无执行权限，请检查 /engine/ODAFileConverter' if wrapper and not os.access('/engine/ODAFileConverter',os.X_OK) else '未配置 DWG 引擎'
+ return {'available':bool(path),'bundled':bundled,'platform':system,'architecture':arch,'path':str(path) if path else None,'name':'内置 DWG 引擎' if bundled else '已配置 DWG 引擎' if path else reason,'message':'统一保存时批量生成并校验 DWG' if path else '当前环境可浏览图纸和暂存修改；生成 DWG 需要此平台的转换运行包。'}
 
 def convert(src,dst,kind,pattern):
  status=converter_status()

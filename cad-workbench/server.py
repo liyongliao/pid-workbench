@@ -58,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
    # Containers see a bridge address; trust only explicitly configured external origins.
    public={entry.strip() for entry in os.environ.get('PID_PUBLIC_ORIGINS','').split(',') if entry.strip()}
    origins={'http://'+value for value in allowed_hosts}|public
-   if not any(urllib.parse.urlsplit(o).netloc==host for o in origins) or (origin and (origin not in origins or urllib.parse.urlsplit(origin).netloc!=host)):
+   if not any(urllib.parse.urlsplit(o).netloc==host for o in origins) or (origin and origin not in origins):
     self.send({'error':'访问地址未通过校验。请使用管理员提供的工作台网址。'},403);return
    u=urllib.parse.urlparse(self.path)
    if u.path.startswith('/api/auth/'):
@@ -84,6 +84,11 @@ class Handler(BaseHTTPRequestHandler):
    data=json.loads(self.rfile.read(length))
    if not isinstance(data,dict):raise ValueError('请求必须为对象')
    data['_actor']='管理员 · '+self.client_address[0]
+   if u.path=='/api/admin/settings':
+    if self.session['role']!='admin':raise AccessError('仅管理员可修改系统设置',403)
+    from site_config import save
+    root=manager.vault.root if getattr(manager,'vault',None) else BASE
+    self.send(save(root,data,manager.catalog));return
    if getattr(manager,'vault',None):
     from production import mutation
     result=mutation(self,u.path,data)
@@ -113,9 +118,9 @@ class Handler(BaseHTTPRequestHandler):
  def authorize(self,admin=False):
   p=urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
   self.session=access.session(self.headers.get('Cookie'))
-  if not admin and p in ('/login','/login.css','/login.js','/login-art.webp','/api/auth/session','/api/health'):return True
+  if not admin and p in ('/setup', '/setup.html', '/setup.js', '/setup.css', '/workspace-ui.css', '/product-header.js', '/api/site', '/login','/login.css','/login.js','/login-art.webp','/api/auth/session','/api/health'):return True
   if not self.session:
-   if self.command=='GET' and p in ('/','/index.html','/nwd.html','/twin.html','/accounts.html'):
+   if self.command=='GET' and p in ('/','/index.html','/nwd.html','/twin.html','/accounts.html','/settings.html'):
     self.send(b'',302,headers={'Location':'/login?next='+urllib.parse.quote(self.path,safe='')})
    else:self.send({'error':'请先登录','loginRequired':True},401)
    return False
@@ -135,6 +140,8 @@ class Handler(BaseHTTPRequestHandler):
      from accounts import identity,session_identity
      login=identity(data.get('login'))
     token=access.setup(data,ip)
+    from site_config import begin
+    begin(access.path.parent.parent)
     if getattr(manager,'vault',None):
      token=session_identity(access,manager.vault,dict(role='admin',login=login,password=data['adminPassword']),ip,access.session(cookie_header(token)))
     self.send({'role':'admin'},headers={'Set-Cookie':cookie_header(token)});return
@@ -153,11 +160,41 @@ class Handler(BaseHTTPRequestHandler):
     result=access.change(data,session,ip);self.send(result,headers={'Set-Cookie':cookie_header()});return
    raise AccessError('未知账户操作',404)
   except AccessError as ex:self.send({'error':str(ex)},ex.status)
+ def feature_access(self):
+  path=urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
+  if path not in ('/nwd.html','/twin.html','/api/logic') and not path.startswith(('/api/nwd/','/api/models/','/api/platforms/','/api/drawing/','/output/','/download/')):return True
+  from site_config import read,capabilities
+  settings=read(access.path.parent.parent)
+  feature='models' if path in ('/nwd.html','/twin.html') or path.startswith('/api/nwd/') and path!='/api/nwd/models' else 'logic' if path=='/api/logic' else None
+  if path.startswith(('/api/models/','/api/platforms/')) and settings['features']['models']=='off':feature='models'
+  if path.startswith(('/api/drawing/','/output/','/download/')) and settings['features']['drawings']=='off':feature='drawings'
+  if feature and not capabilities(manager)['enabled'][feature]:
+   if path.endswith('.html'):self.send(b'',302,headers={'Location':'/?notice='+feature+'-unavailable'})
+   else:self.send({'error':'相关资料尚未配置，或管理员已关闭此功能','featureUnavailable':True},404)
+   return False
+  return True
  def get(self):
+  if not self.feature_access():return
   catalog=manager.catalog;manifest=manager.manifest;catmap=manager.catmap
   u=urllib.parse.urlparse(self.path);p=urllib.parse.unquote(u.path);q=urllib.parse.parse_qs(u.query)
   if p=='/api/auth/session':
-   self.send({'configured':bool(access.config),'canSetup':not access.config and local_client(self.client_address[0]),'authenticated':bool(self.session),**({'role':self.session['role'],'csrf':self.session['csrf']} if self.session else {})});return
+   self.send({'configured':bool(access.config),'canSetup':not access.config,'setupTokenRequired':not local_client(self.client_address[0]),'authenticated':bool(self.session),**({'role':self.session['role'],'csrf':self.session['csrf']} if self.session else {})});return
+  if p=='/api/site':
+   from site_config import public
+   self.send(public(access.path.parent.parent));return
+  if p=='/api/capabilities':
+   from site_config import capabilities
+   self.send(capabilities(manager));return
+  if p=='/api/admin/settings':
+   if self.session['role']!='admin':self.send({'error':'仅管理员可查看系统设置'},403);return
+   from site_config import read,capabilities
+   self.send(dict(settings=read(access.path.parent.parent),capabilities=capabilities(manager)));return
+  if p in ('/setup','/setup.html','/settings.html'):
+   self.send((CODE_ROOT/'static/setup.html').read_bytes(),ctype='text/html; charset=utf-8');return
+  from site_assets import asset
+  site_file=asset(access.path.parent.parent,p,CODE_ROOT/'static')
+  if site_file:
+   self.cached((p,site_file.stat().st_mtime_ns,site_file.stat().st_size),site_file.read_bytes,'text/javascript');return
   if p=='/project-settings.js' and not (CODE_ROOT/'static/project-settings.js').is_file():
    self.send(b'globalThis.PidProject = {};',ctype='text/javascript');return
   if p=='/login':
@@ -192,9 +229,16 @@ class Handler(BaseHTTPRequestHandler):
    self.send(report,ctype=('text/html; charset=utf-8' if name.endswith('.html') else 'text/plain; charset=utf-8'),filename=name if q.get('download') else None);return
   if p=='/api/health':self.send({'name':'cad-workbench','drawings':len(catalog),'version':VERSION,'instance':instance_id(BASE)});return
   if p=='/api/catalog':
+   from site_config import read
+   if read(access.path.parent.parent)['features']['drawings']=='off':self.send([]);return
    self.cached(('catalog',manager.library_version),lambda:[{k:v for k,v in r.items() if k!='search'} for r in catalog],'application/json; charset=utf-8');return
   if p=='/api/search':
-   self.send(manager.search_index.search(q.get('q',[''])[0][:256],q.get('platform',[''])[0],q.get('team',[''])[0]));return
+   from site_config import read
+   modes=read(access.path.parent.parent)['features']
+   if modes['drawings']=='off':self.send({'drawings':[],'equipment':[],'total':0,'equipmentTotal':0});return
+   results=manager.search_index.search(q.get('q',[''])[0][:256],q.get('platform',[''])[0],q.get('team',[''])[0])
+   if modes['equipment']=='off':results.update(equipment=[],equipmentTotal=0)
+   self.send(results);return
   if p.startswith('/api/drawing/'):
    id=p.split('/')[-1]
    if id not in manifest:self.send({'error':'未找到图纸'},404);return
@@ -226,6 +270,8 @@ class Handler(BaseHTTPRequestHandler):
      if norm(shorttag(e['tag']))==target:matches.append(dict(e,drawingId=r['id'],drawingTitle=r['title'],code=r['code']))
    causes=[c for c in logic.get('causes',[]) if team=='工艺' and c['platform']==platform and (norm(shorttag(c['tag']))==target or any(norm(shorttag(t))==target for t in re.findall(r'(?:[A-Z]+-)?[A-Z]{1,6}-?\d+[A-Z]?',c['original'])))]
    effects=[e for e in logic.get('effects',[]) if norm(shorttag(e['tag']))==target] if platform=='CEPD' and team=='工艺' else []
+   from site_config import capabilities
+   if not capabilities(manager)['enabled']['logic']:causes=[];effects=[]
    self.send({'drawings':matches,'causes':causes,'effects':effects});return
   if p.startswith('/download/'):
    parts=p.split('/')

@@ -2,7 +2,8 @@
 import hashlib
 import json
 from access_control import AccessError, password_record, verify
-from vault import TEAMS, now
+from vault import now
+from site_config import team_names
 
 
 def identity(value):
@@ -26,8 +27,8 @@ def session_identity(access, vault, data, ip, old):
             if not admin:
                 if db.execute("SELECT 1 FROM accounts WHERE login=?", (login,)).fetchone():
                     raise AccessError("账号已存在")
-                db.execute("INSERT INTO accounts VALUES(?,?,?, ?,1)",(login,login,"",json.dumps(TEAMS)))
-            name, teams = login,list(TEAMS)
+                db.execute("INSERT INTO accounts VALUES(?,?,?, ?,1)",(login,login,"",json.dumps(team_names(vault.root))))
+            name, teams = login,team_names(vault.root)
         elif role == "editor":
             access.guard_attempt(ip)
             account=db.execute("SELECT * FROM accounts WHERE login=? AND enabled=1 AND secret!=''",(login,)).fetchone()
@@ -47,7 +48,7 @@ def session_identity(access, vault, data, ip, old):
 def manage(access,vault,data):
     login=identity(data.get("login"));name=identity(data.get("name"))
     teams=data.get("teams")
-    if not isinstance(teams,list) or any(t not in TEAMS for t in teams):
+    if not isinstance(teams,list) or any(t not in team_names(vault.root, include_disabled=True) for t in teams):
         raise AccessError("专业授权无效")
     with access.lock, vault.transaction() as db:
         existing=db.execute("SELECT * FROM accounts WHERE login=?",(login,)).fetchone()
@@ -66,5 +67,5 @@ def manage(access,vault,data):
 
 
 def require_team(session,team):
-    if team not in TEAMS or (session["role"]!="admin" and team not in session.get("teams",[])):
+    if team not in team_names() or (session["role"]!="admin" and team not in session.get("teams",[])):
         raise AccessError("当前账号没有该专业的编辑权限",403)

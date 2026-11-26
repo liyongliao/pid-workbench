@@ -28,7 +28,7 @@ def transfer(task,source,destination):
                 with contextlib.closing(store.connect()) as src, contextlib.closing(sqlite3.connect(data/"workbench.sqlite3")) as dst:
                     src.backup(dst)
                     dst.execute("DELETE FROM heartbeat");dst.commit()
-                for name in ("originals","revisions","data","models"):
+                for name in ("originals","revisions","data","models","site","legends"):
                     if (source/name).exists():clone(source/name,data/name)
                 if (source/"profiles.json").is_file():
                     (data/"profiles.json").write_bytes((source/"profiles.json").read_bytes())

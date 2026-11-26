@@ -5,7 +5,7 @@ from wsgiref.util import FileWrapper
 
 
 def serve(req, env, start, root, path):
-    if req.authorize():
+    if req.authorize() and req.feature_access():
         match = re.fullmatch(r"/api/platforms/([kl])/(index\.json|[a-f0-9]{64})", path)
         if match:
             platform, asset = match.groups()

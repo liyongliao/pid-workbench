@@ -41,8 +41,11 @@ for(const id of ['loginForm','setupForm'])el(id).onsubmit=async e=>{
  try{
   const session=await (await fetch('/api/auth/session')).json();
   if(session.authenticated){location.replace(destination());return}
+  if(!session.configured){location.replace('/setup');return}
   if(session.configured){el('loginForm').hidden=false;selectRole('viewer',false)}
   else if(session.canSetup){el('formTitle').textContent='启用图纸工作台';el('formHelp').textContent='设置管理员账号与普通用户访问密码。';el('setupForm').hidden=false}
   else{el('formTitle').textContent='等待管理员启用';el('formHelp').textContent='请管理员在服务器本机打开工作台，完成首次密码设置。'}
  }catch{el('loginError').textContent='暂时无法连接服务，请刷新重试。'}
 })();
+
+fetch('/api/site').then(r=>r.json()).then(site=>{document.title='登录 · '+site.systemName;const brand=document.querySelector('.brand');brand.lastChild.textContent=site.systemName;el('projectName').textContent=site.projectName;el('projectDescription').textContent=site.description}).catch(()=>{});

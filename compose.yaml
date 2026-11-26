@@ -19,14 +19,16 @@ x-vault: &vault
 services:
   workbench:
     <<: *service
-    image: pid-workbench-web:3.2.0
+    image: pid-workbench-web:3.5.1
+    build: {context: ., target: viewer}
     ports: ["${PID_BIND_IP:-127.0.0.1}:${PID_PUBLISHED_PORT:-8765}:8765"]
     environment:
       PID_PUBLIC_ORIGINS: "${PID_PUBLIC_ORIGINS:?set trusted browser origins}"
     volumes: [*vault]
   worker:
     <<: *service
-    image: pid-workbench-worker:3.2.0
+    image: pid-workbench-worker:3.5.1
+    build: {context: ., target: cad}
     command: ["python","worker.py"]
     healthcheck:
       test: ["CMD","python","-c","import sqlite3,time; s=sqlite3.connect('/vault/workbench.sqlite3').execute('select stamp from heartbeat').fetchone(); assert s and time.time()-s[0]<25"]

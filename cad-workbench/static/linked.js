@@ -1,6 +1,7 @@
 // Both viewports resolve selections by drawing ID and CAD handle, or by a versioned model object.
 const Linked=(()=>{
  const el=id=>document.getElementById(id);
+ let capabilities=null,ViewClass=null,modelEnabled=false;
  let render,draw,source='sheet',models=[],objects=new Map(),outlines=new Map(),paths=new Map(),selectedSheet=null;
  let links={},manual={},currentModel=null,pending=null,sequence=0,detailSeq=0,searchSeq=0,mode='split';
  let authored=false,assembly=null,preview=null,compare=false,reviewCamera=null;
@@ -12,6 +13,8 @@ const Linked=(()=>{
  function route(endpoint,params={}){return '/api/models/'+endpoint+'?'+new URLSearchParams({model:source,...params})}
  function notice(msg){el('modelEmpty').textContent=msg;el('modelEmpty').hidden=!msg}
  function mount(View){
+  ViewClass=View;if(!modelAllowed())return;
+  if(render)return;
   try{render=new View(el('modelSurface'),id=>source==='sheet'?selectItem(id,true):choose(Number(id),true),()=>{});if(draw)showSource()}
   catch{notice('当前浏览器无法启用 WebGL 三维显示。可通过本图对象和模型搜索查询属性。')}
  }
@@ -50,8 +53,9 @@ const Linked=(()=>{
    }
   }
   el('hitAreas').prepend(hit);
+  configure(capabilities);
   list();if(changed){pending=null;selectedSheet=null;currentModel=null;el('modelTag').hidden=true;links={};manual={};
-   source='sheet';
+   source=sheetAllowed()?'sheet':models.find(m=>m.platform===draw.platform)?.id||'';
    showSource()
   }else if(source==='sheet'&&render){select(S.selected)}
  }
@@ -79,6 +83,7 @@ const Linked=(()=>{
  el('objectQuery').oninput=list;
  el('objectGroups').onclick=e=>{const b=e.target.closest('[data-cad]');if(b)selectItem(b.dataset.cad,true)};
  function layout(newMode){
+  if(newMode!=='drawing'&&!modelAllowed())newMode='drawing';
   mode=newMode;el('linkedViews').dataset.layout=mode;
   document.querySelectorAll('button[data-layout]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layout===mode)));
   requestAnimationFrame(()=>{resizeView();render?.invalidate()})
@@ -160,7 +165,7 @@ const Linked=(()=>{
   el('modelResults').hidden=true;el('modelQuery').value='';el('modelKind').value='';pending=null;
   el('modelFocus').disabled=true;label('');render?.clear();currentModel=null;links={};manual={};
   el('modelBasis').hidden=physical||!draw||!authored;el('modelBasis').open=false;
-  if(!draw)return;
+  if(!draw||!modelAllowed()||source==='sheet'&&!sheetAllowed())return;
   const state=document.querySelector('.link-state');
   const shared=!physical||info()?.platform===draw.platform;
   state.classList.toggle('independent',!shared);
@@ -207,9 +212,11 @@ const Linked=(()=>{
   const menu=el('modelSource');
   try{
    models=await api('/api/models');
+   menu.querySelectorAll('optgroup').forEach(g=>g.remove());
    const group=document.createElement('optgroup');group.label='工程构件索引';
    for(const m of models)group.append(new Option(m.name+'构件索引',m.id));
-   if(models.length)menu.append(group)
+   if(models.length)menu.append(group);
+   configure(capabilities);if(draw&&!sheetAllowed()){source=models.find(m=>m.platform===draw.platform)?.id||'';showSource()}
   }catch{menu.title="工程构件索引暂不可用"}
  }
  async function choose(id,picked){
@@ -274,5 +281,16 @@ const Linked=(()=>{
   preview=draft;compare=false;el('sheetCompare').textContent='查看原自动模型';const data=draw;draw=null;el('sheetReviewInfo').textContent='正在组装草稿…';
   renderHitAreas();bind(data,el('scene').querySelector('svg'));layout('split')
  }
- return {mount,bind,select,loading,previewModel,draft:()=>preview,directory:()=>tree(false),object:h=>objects.get(h),owner:h=>source==='sheet'&&!(authored&&render?.sheet?.byId.has(h))?(outlines.get(h)||h):h}
+ function sheetAllowed(){return !!capabilities&&(capabilities.enabled.schematic||capabilities.enabled.drawings&&capabilities.modelPolicy!=='off'&&(!!draw?.sheetModel||authored))}
+ function modelAllowed(){return !!capabilities&&capabilities.enabled.drawings&&(sheetAllowed()||capabilities.linkedModels&&models.some(m=>m.platform===draw?.platform))}
+ function configure(next){
+  if(!next)return;
+  const load=next.linkedModels&&!capabilities?.linkedModels;capabilities=next;
+  const on=modelAllowed(),wasEnabled=modelEnabled;modelEnabled=on;el('modelPane').hidden=!on;document.querySelector('.view-toolbar').hidden=!on;
+  el('modelSource').querySelector('[value=sheet]').hidden=!sheetAllowed();
+  if(!on)layout('drawing');else if(!wasEnabled&&mode==='drawing')layout('split');
+  if(on&&ViewClass&&!render)mount(ViewClass);
+  if(load)inventory();
+ }
+ return {configure,mount,bind,select,loading,previewModel,draft:()=>preview,directory:()=>tree(false),object:h=>objects.get(h),owner:h=>source==='sheet'&&!(authored&&render?.sheet?.byId.has(h))?(outlines.get(h)||h):h}
 })();

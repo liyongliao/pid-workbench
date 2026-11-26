@@ -64,7 +64,7 @@ try{
   el('identity').textContent=session.name||names[session.role];
   el('access').textContent=session.role==='viewer'?'可浏览、查询与下载图纸。':[names[session.role],session.login,session.role==='editor'&&session.teams.join('、')].filter(Boolean).join(' · ');
   el('logout').disabled=false;
-  if(session.role==='admin'){el('editors').hidden=false;el('passwordCard').hidden=false;await list()}
+  if(session.role==='admin'){const config=await request('/api/capabilities'),fieldset=el('editorForm').querySelector('fieldset');fieldset.replaceChildren(Object.assign(document.createElement('legend'),{textContent:'专业授权'}));for(const team of config.teams){const label=document.createElement('label'),box=document.createElement('input');box.type='checkbox';box.name='team';box.value=team.name;label.append(box,document.createTextNode(team.name+(team.enabled?'':'（已停用）')));fieldset.append(label)}el('editors').hidden=false;el('passwordCard').hidden=false;await list()}
  }
 }catch(e){el('notice').textContent=e.message}
 window.addEventListener('pageshow',event=>{if(event.persisted)location.reload()});

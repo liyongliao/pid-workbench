@@ -22,9 +22,7 @@ COPY --from=nwd-runtime /usr/share/dotnet /usr/share/dotnet
 ENV DOTNET_ROOT=/usr/share/dotnet PID_NWD_CONVERTER=/opt/nwd/nwcio
 
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources && apt-get update && apt-get install -y --no-install-recommends libicu72 libssl3 libgl1 libegl1 libfontconfig1 libxkbcommon0 libdbus-1-3 libxcb-cursor0 libxkbcommon-x11-0 && rm -rf /var/lib/apt/lists/*
-RUN apt-get update && apt-get install -y --no-install-recommends xvfb xauth libopengl0 libglib2.0-0 libxcb-keysyms1 libxcb-icccm4 libxcb-xinerama0 libxcb-randr0 && rm -rf /var/lib/apt/lists/*
-COPY --chmod=755 docker/oda-headless.sh /opt/workbench/oda-headless
-COPY docker/runtime/NotoSansCJKsc-Regular.otf /usr/local/share/fonts/NotoSansCJKsc-Regular.otf
-COPY docker/runtime/OFL.txt /usr/local/share/doc/noto/OFL.txt
-ENV PID_DWG_CONVERTER=/opt/workbench/oda-headless PID_CAD_FONT=/usr/local/share/fonts/NotoSansCJKsc-Regular.otf
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk xvfb xauth libopengl0 libglib2.0-0 libxcb-keysyms1 libxcb-icccm4 libxcb-xinerama0 libxcb-randr0 && rm -rf /var/lib/apt/lists/*
+COPY --chmod=755 docker/oda-headless.sh /usr/local/bin/pid-oda-headless
+ENV PID_DWG_CONVERTER=/usr/local/bin/pid-oda-headless PID_CAD_FONT=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
 USER 1000:1000

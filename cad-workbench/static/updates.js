@@ -4,8 +4,8 @@ async function refreshLibrary(force=false){
  if(libraryUpdates.busy){await libraryUpdates.busy;if(force)return refreshLibrary(true);return}
  libraryUpdates.busy=(async()=>{
   const {version}=await api('/api/library-version');
-  if(!force&&version===libraryUpdates.version)return;
-  const catalog=await api('/api/catalog');S.catalog=catalog;renderPlatforms();
+  await initializeSite();if(!force&&version===libraryUpdates.version)return;
+  drawingMemory.clear();const catalog=await api('/api/catalog');S.catalog=catalog;renderPlatforms();
   if(S.query)await search();else updateList();
   const current=S.drawing?.id,sequence=S.loadVersion;
   if(current){
@@ -19,6 +19,7 @@ async function refreshLibrary(force=false){
     }
    }
   }
+  if(!current&&catalog.length&&S.capabilities.enabled.drawings&&S.tab==='drawings')await loadDrawing(catalog[0].id);
   if(S.tab==='equipment'&&!S.query)renderEquipment();
   if(S.tab==='management'&&M.tab==='attributes')await renderAttributeManager();
   libraryUpdates.version=version;

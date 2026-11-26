@@ -3,13 +3,17 @@ import json
 import os
 import re
 from pathlib import Path
-from vault import TEAMS
+from site_config import team_names, read
 
 def profile(team):
-    if team not in TEAMS:raise ValueError("未知专业")
+    if team not in team_names(include_disabled=True):raise ValueError("未知专业")
     root=os.environ.get("PID_VAULT")
     file=Path(root)/"profiles.json" if root else None
-    return json.loads(file.read_text()).get(team,{}) if file and file.is_file() else {}
+    config = json.loads(file.read_text()).get(team,{}) if file and file.is_file() else {}
+    settings = next((t for t in read()['teams'] if t['name']==team), {})
+    for key in ('tagFields', 'searchFields'):
+        if settings.get(key):config[key]=settings[key]
+    return config
 
 def check_number(team,code):
     rule=profile(team).get("codePattern")
