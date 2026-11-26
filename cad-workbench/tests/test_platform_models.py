@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import sqlite3
 import struct
@@ -23,7 +24,7 @@ class PlatformModelTests(unittest.TestCase):
             vault=initialize_empty(Path(tmp)/'vault')
             root=vault.root/'models'/'l';root.mkdir(parents=True)
             (root/'info.json').write_text(json.dumps(dict(id='l',platform='WHPL',digest='test')))
-            with sqlite3.connect(root/'objects.sqlite') as db:
+            with closing(sqlite3.connect(root/'objects.sqlite')) as db, db:
                 db.execute('CREATE TABLE objects(id INTEGER,tag TEXT)')
                 db.executemany('INSERT INTO objects VALUES(?,?)',[(5,'P-1'),(6,'PI-2'),(7,'PI-2')])
             base=vault.view(vault.head());folder=base/'output'/'d0';folder.mkdir()
@@ -43,7 +44,7 @@ class PlatformModelTests(unittest.TestCase):
             header=json.dumps(d).encode();header+=b' '*(-len(header)%4)
             raw=struct.pack('<9f3I',0,0,0,1,0,0,0,1,0,0,1,2)
             (root/'parts'/file).write_bytes(struct.pack('<4sIII4s',b'glTF',2,28+len(header)+len(raw),len(header),b'JSON')+header+struct.pack('<I4s',len(raw),b'BIN\0')+raw)
-            with sqlite3.connect(root/'objects.sqlite') as db:
+            with closing(sqlite3.connect(root/'objects.sqlite')) as db, db:
                 db.executescript('CREATE TABLE fragments(part TEXT,node INTEGER,object INTEGER,tri INTEGER);CREATE TABLE objects(id INTEGER,kind TEXT);')
                 db.execute('INSERT INTO fragments VALUES(?,0,7,1)',(file,));db.execute("INSERT INTO objects VALUES(7,'阀门')")
             index_space(root)
