@@ -75,7 +75,7 @@ class SettingsTests(unittest.TestCase):
     def test_remote_setup_code_is_one_time_and_never_in_public_settings(self):
         auth = AccessControl(self.root)
         code = auth.setup_code()
-        self.assertEqual((self.root/'data/setup-token.txt').stat().st_mode & 0o777, 0o600)
+        if os.name!='nt':self.assertEqual((self.root/'data/setup-token.txt').stat().st_mode & 0o777, 0o600)
         payload = dict(adminPassword='Admin-test-123', viewerPassword='Viewer-test-123', setupToken='wrong')
         with self.assertRaises(AccessError):auth.setup(payload, '192.0.2.50')
         payload['setupToken'] = code
